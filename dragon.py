@@ -13,14 +13,14 @@ from other.fractal import mitsuba
 
 # Examples:
 #
-# 1. The version we printed: ./dragon.py --level 12 --smooth 3 --size 150 --thickness .7 --alpha .8 --z-scale .25
-# 2. Bowl with missing base: ./dragon.py --level 11 --smooth 4 --size 150 --thickness .9 --closed 1 --closed-base 0 --alpha .8 --z-scale .25
-# 3. Version for Eugene: ./dragon.py --level 15 --smooth 2 --size 150 --thickness .3 --z-scale .5
+# 1. The version we printed: ./dragon.py --level 11 --smooth 3 --size 150 --thickness .7 --alpha .8 --z-scale .25
+# 2. Bowl with missing base: ./dragon.py --level 10 --smooth 4 --size 150 --thickness .9 --closed 1 --closed-base 0 --alpha .8 --z-scale .25
+# 3. Version for Eugene: ./dragon.py --level 14 --smooth 2 --size 150 --thickness .3 --z-scale .5
 
 props = PropManager()
 ftype = props.add('type','dragon').set_allowed('dragon terdragon koch gosper'.split()).set_category('fractal')
-levels = props.add('level',5).set_category('fractal')
-scale_level = props.add('scale_level',0).set_category('fractal')
+levels = props.add('level',4).set_category('fractal')
+scale_level = props.add('scale_level',-1).set_category('fractal')
 smooth = props.add('smooth',0).set_category('fractal')
 corner_shift = props.add('corner_shift',1/20).set_category('fractal')
 size = props.add('size',150.).set_category('fractal')
@@ -65,7 +65,7 @@ def heights_helper(levels):
   heights = []
   z = 0
   alpha = system()[1]
-  for level in xrange(levels):
+  for level in xrange(levels+1):
     heights.append(z)
     z += z_scale()*alpha**level
   return asarray(heights)
@@ -112,7 +112,7 @@ def is_closed():
 
 @cache
 def branching():
-  assert levels()>1
+  assert levels()>0
   open = not is_closed()
   a,b = (len(curves()[1])-open),(len(curves()[0])-open)
   branching = a//b
@@ -133,7 +133,7 @@ def mesh():
     assert mesh.nodes()==len(X)
     assert not len(mesh.nonmanifold_nodes(True))
     # Rescale
-    if scale_level():
+    if scale_level()>=0:
       sX = concatenate([attach_z(curve,height) for curve,height in zip(curves_helper(scale_level()),heights_helper(scale_level()))])
     else:
       sX = X
@@ -148,9 +148,9 @@ def mesh():
     alpha = thickness_alpha()
     if alpha<0:
       alpha = shrink
-    thick = hstack([repeat(alpha**level,(base+closed-1)*branching()**level+1-closed) for level in xrange(levels())])
+    thick = hstack([repeat(alpha**level,(base+closed-1)*branching()**level+1-closed) for level in xrange(levels()+1)])
     thick *= thickness()/thick[-1]
-    if scale_level():
+    if scale_level()>=0:
       thick *= alpha**(levels()-scale_level())
     # Label patches
     patch = arange(len(mesh.elements)//(1+branching())).repeat(1+branching())

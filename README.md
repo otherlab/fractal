@@ -67,8 +67,8 @@ the benefit that each patch isomophism class can be given a different pretty col
 example:
 
     # Generate a level 13 dragon curve, writing mitsuba data to gen-dragon, and view it with Mitsuba
-    ./dragon.py --type dragon --level 14 --smooth 4 --border-layers 4 --thickness 0.2 --ground 1 --rotation=0,-1,0,0 --mitsuba-dir gen-dragon --console 1
+    ./dragon.py --type dragon --level 13 --smooth 4 --border-layers 4 --thickness 0.2 --ground 1 --rotation=0,-1,0,0 --mitsuba-dir gen-dragon --console 1
     ./render-dragon --gui 1 --view front --data gen-dragon
 
     # Generate a level 11 dragon curve, writing a single mesh to dragon.stl
-    ./dragon.py --type dragon --level 12 --smooth 3 --border-crease 0 --thickness 0.8 --thickness-alpha .8 --instance 0 -o dragon.stl --console 1
+    ./dragon.py --type dragon --level 11 --smooth 3 --border-crease 0 --thickness 0.8 --thickness-alpha .8 --instance 0 -o dragon.stl --console 1

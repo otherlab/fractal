@@ -10,53 +10,53 @@ from other.fractal.mitsuba import *
 from other.fractal import *
 
 # Fine front:
-# ./dragon.py --type dragon --level 18 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.025 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-fine --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8
+# ./dragon.py --type dragon --level 17 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.025 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-fine --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8
 # ./render-dragon --gui 1 --samples 4096 --data gen-fine --depth 10 --width 1280 --height 960 --color-seed 194514
 
 # Simple:
-# for i in `seq 0 5`; do ./dragon.py --console 1 --smooth $i --mitsuba-dir gen-simple-$i --type dragon --level 6 --scale-level 0 --corner-shift 0.05 --size 150 --thickness 0.1 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --border-layers 1 --flip 1 --ground 1 --settle-step 0.01 --origin=-6.6614485991588577,214.62817962567379,78.913429143861407 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0; done
+# for i in `seq 0 5`; do ./dragon.py --console 1 --smooth $i --mitsuba-dir gen-simple-$i --type dragon --level 5 --corner-shift 0.05 --size 150 --thickness 0.1 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --border-layers 1 --flip 1 --ground 1 --settle-step 0.01 --origin=-6.6614485991588577,214.62817962567379,78.913429143861407 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0; done
 # for i in `seq 0 5`; do ./render-dragon --integrator pssmlt --data gen-simple-$i --samples 512 --simple-color .8,0,0 --facets 1 -o dragon-simple-$i.exr; done
 
 # Fine down/side:
-# ./dragon.py --type dragon --level 14 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.2 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-side-fine --origin=-39.679084283641487,-239.85430391769961,75.543129644474547 --target 5.2339400073202738,-10.984723621310748,11.128750338448013 --rotation=-0.09978530235048004,0.080263531268720989,0.62102958705347577,-0.77325475167456148
+# ./dragon.py --type dragon --level 13 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.2 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-side-fine --origin=-39.679084283641487,-239.85430391769961,75.543129644474547 --target 5.2339400073202738,-10.984723621310748,11.128750338448013 --rotation=-0.09978530235048004,0.080263531268720989,0.62102958705347577,-0.77325475167456148
 # ./render-dragon --gui 1 --view down --data gen-side-fine --depth 10 --width 1280 --height 960 --color-seed 194514 --samples 4096 &
 # ./render-dragon --gui 1 --view side --data gen-side-fine --depth 10 --width 1280 --height 960 --color-seed 194514 --samples 4096 &
 
 # Canopy:
-# ./dragon.py --type dragon --level 15 --scale-level 15 --smooth 2 --corner-shift 0.05 --size 150 --thickness 0.17999999999999999 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --flip 1 --ground 0 --settle-step 0.01 --mitsuba-dir gen-canopy --origin 15.937630749436821,-10.55833672257492,60.718947647935565 --target 18.266964477314549,-10.578622900392148,71.818862427738665 --rotation 1,0,0,0
+# ./dragon.py --type dragon --level 14 --scale-level 14 --smooth 2 --corner-shift 0.05 --size 150 --thickness 0.17999999999999999 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --flip 1 --ground 0 --settle-step 0.01 --mitsuba-dir gen-canopy --origin 15.937630749436821,-10.55833672257492,60.718947647935565 --target 18.266964477314549,-10.578622900392148,71.818862427738665 --rotation 1,0,0,0
 # ./render-dragon --view canopy --data gen-canopy-fine --depth 10 --samples 1024 --width 1280 --height 960 --gui 1 --integrator erpt
 
 # Fine canopy
-# ./dragon.py --type dragon --level 15 --scale-level 15 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.17999999999999999 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --flip 1 --ground 0 --settle-step 0.01 --mitsuba-dir gen-canopy-fine --origin 15.937630749436821,-10.55833672257492,60.718947647935565 --target 18.266964477314549,-10.578622900392148,71.818862427738665 --rotation 1,0,0,0
+# ./dragon.py --type dragon --level 14 --scale-level 14 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.17999999999999999 --filename dragon.stl --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --flip 1 --ground 0 --settle-step 0.01 --mitsuba-dir gen-canopy-fine --origin 15.937630749436821,-10.55833672257492,60.718947647935565 --target 18.266964477314549,-10.578622900392148,71.818862427738665 --rotation 1,0,0,0
 
 # Fine terdragon front:
-# ./dragon.py --type terdragon --level 11 --smooth 5 --colorize 1 --ground 1 --mitsuba-dir gen-terdragon-front --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 1.7855807963205805e-11,1,0,0 --thickness .05 --border-layers 8
+# ./dragon.py --type terdragon --level 10 --smooth 5 --colorize 1 --ground 1 --mitsuba-dir gen-terdragon-front --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 1.7855807963205805e-11,1,0,0 --thickness .05 --border-layers 8
 # ./render-dragon --gui 1 --view front --data gen-terdragon-front --samples 4096 --width 1280 --height 960 --color-seed 20002
 
 # Fine terdragon side/down:
-# ./dragon.py --type terdragon --level 9 --smooth 5 --thickness 0.29999999999999999 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-terdragon-side --origin=-70.331627112440813,164.23717989126743,65.999483565575716 --target 0.57691794482902314,-7.4761573866077597,26.788706998314769 --rotation=-0.74593201261051922,0.62282714395871686,0.13974285587294705,-0.19011500609767951
+# ./dragon.py --type terdragon --level 8 --smooth 5 --thickness 0.29999999999999999 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-terdragon-side --origin=-70.331627112440813,164.23717989126743,65.999483565575716 --target 0.57691794482902314,-7.4761573866077597,26.788706998314769 --rotation=-0.74593201261051922,0.62282714395871686,0.13974285587294705,-0.19011500609767951
 # ./render-dragon --view terdragon-side --data gen-terdragon-side --samples 4096 --width 1280 --height 960 --color-seed 20002 
 # ./render-dragon --view terdragon-down --data gen-terdragon-side --samples 4096 --width 1280 --height 960 --color-seed 20002
 
 # Koch:
-# ./dragon.py --type koch --level 7 --smooth 5 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-koch --origin=-46.082316229740172,179.20323643974311,73.74081360141966 --target=-0.47139844334676173,-7.465299519683386,26.072048830404896 --rotation=-1.7884692144788661e-08,0.95116086597988436,0.30869565437238849,-2.1036733629381521e-08 --thickness .01
+# ./dragon.py --type koch --level 6 --smooth 5 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-koch --origin=-46.082316229740172,179.20323643974311,73.74081360141966 --target=-0.47139844334676173,-7.465299519683386,26.072048830404896 --rotation=-1.7884692144788661e-08,0.95116086597988436,0.30869565437238849,-2.1036733629381521e-08 --thickness .01
 # ./render-dragon --view koch-front --data gen-koch --samples 1024 --integrator pssmlt --color-seed 184853 --width 1280 --height 960 -o koch-front.exr
 
 # Koch side:
-# ./dragon.py --type koch --level 7 --smooth 5 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-koch-side --origin 0.22170089213766708,123.93437270853076,180.33272525228978 --target=-6.5876712447798162,-17.224156513626859,44.43756566063562 --rotation=1,0,0,0 --thickness .01
+# ./dragon.py --type koch --level 6 --smooth 5 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-koch-side --origin 0.22170089213766708,123.93437270853076,180.33272525228978 --target=-6.5876712447798162,-17.224156513626859,44.43756566063562 --rotation=1,0,0,0 --thickness .01
 # ./render-dragon --view koch-side --data gen-koch-side --samples 1024 --integrator pssmlt --color-seed 184853 --width 1280 --height 960 -o koch-side.exr
 
 # Gosper front:
-# ./dragon.py --type gosper --level 6 --scale-level 5 --smooth 4 --corner-shift 0.01 --thickness 0.3 --colorize 1 --border-layers 8 --ground 1 --origin=-37.548031375625783,174.33524984605464,94.06447355517362 --target 2.9977420980846889,-0.88814677571724876,21.815315250732041 --rotation=-5.4497675157361205e-09,-0.61958769628079802,0.78492744035194328,-5.7771780692661481e-09 --mitsuba-dir gen-gosper-front --console 1
+# ./dragon.py --type gosper --level 5 --scale-level 4 --smooth 4 --corner-shift 0.01 --thickness 0.3 --colorize 1 --border-layers 8 --ground 1 --origin=-37.548031375625783,174.33524984605464,94.06447355517362 --target 2.9977420980846889,-0.88814677571724876,21.815315250732041 --rotation=-5.4497675157361205e-09,-0.61958769628079802,0.78492744035194328,-5.7771780692661481e-09 --mitsuba-dir gen-gosper-front --console 1
 # ./render-dragon --view gosper-front --data gen-gosper-front --samples 1024 --integrator pssmlt --color-seed 184811 --width 1280 --height 960
 # ./render-dragon --view gosper-other --data gen-gosper-front --samples 1024 --integrator pssmlt --color-seed 184811 --width 1280 --height 960
 
 # Gosper back:
-# ./dragon.py --type gosper --level 6 --scale-level 5 --smooth 4 --corner-shift 0.01 --thickness 0.3 --colorize 1 --border-layers 8 --ground 1 --origin=-37.548031375625783,174.33524984605464,94.06447355517362 --target 2.9977420980846889,-0.88814677571724876,21.815315250732041 --rotation 4.9634164601974635e-09,-0.9374474864151201,-0.3481267157429479,-1.0434993813479565e-08 --mitsuba-dir gen-gosper-back --console 1
+# ./dragon.py --type gosper --level 5 --scale-level 4 --smooth 4 --corner-shift 0.01 --thickness 0.3 --colorize 1 --border-layers 8 --ground 1 --origin=-37.548031375625783,174.33524984605464,94.06447355517362 --target 2.9977420980846889,-0.88814677571724876,21.815315250732041 --rotation 4.9634164601974635e-09,-0.9374474864151201,-0.3481267157429479,-1.0434993813479565e-08 --mitsuba-dir gen-gosper-back --console 1
 # ./render-dragon --view gosper-back --data gen-gosper-back --samples 1024 --integrator pssmlt --color-seed 184811 --width 1280 --height 960
 
 # Gosper side:
-# ./dragon.py --type gosper --level 6 --scale-level 5 --smooth 4 --corner-shift 0.01 --thickness 0.29999999999999999 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-gosper-side --origin 106.14852758526946,184.76928051872716,86.739813112730673 --target=-1.8413109040436795,8.757791108450121,17.952745587243811 --rotation 0.88225156371353819,-0.40498582943483014,0.019493838923558819,0.23924599584114714
+# ./dragon.py --type gosper --level 5 --scale-level 4 --smooth 4 --corner-shift 0.01 --thickness 0.29999999999999999 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-gosper-side --origin 106.14852758526946,184.76928051872716,86.739813112730673 --target=-1.8413109040436795,8.757791108450121,17.952745587243811 --rotation 0.88225156371353819,-0.40498582943483014,0.019493838923558819,0.23924599584114714
 # ./render-dragon --view gosper-side --data gen-gosper-side --samples 1024 --integrator pssmlt --color-seed 184811 --width 1280 --height 960
 
 # Define properties

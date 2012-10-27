@@ -46,7 +46,7 @@ static vector<Array<Vector<T,2>>> iterate_L_system(real start_angle_per_level, r
   OTHER_ASSERT(levels>=0);
   vector<Array<TV2>> curves;
   string pattern = axiom;
-  for (int level : range(levels)) {
+  for (int level : range(levels+1)) {
     // Trace curve
     TV2 X;
     const double step = pow(shrink_factor,level);
@@ -68,7 +68,7 @@ static vector<Array<Vector<T,2>>> iterate_L_system(real start_angle_per_level, r
       curve.pop();
     }
     curves.push_back(curve);
-    if (level == levels-1)
+    if (level == levels)
       break;
 
     // Refine
@@ -87,14 +87,14 @@ static vector<Array<Vector<T,2>>> iterate_L_system(real start_angle_per_level, r
 
 static Ref<TriangleMesh> branching_mesh(const int branching, const int levels, const int base, bool closed) {
   OTHER_ASSERT(branching>=2);
-  OTHER_ASSERT(levels>=2);
-  const int64_t count = (base-!closed)*(1+branching)*(1-(int64_t)pow((double)branching,levels-1))/(1-branching);
+  OTHER_ASSERT(levels>=1);
+  const int64_t count = (base-!closed)*(1+branching)*(1-(int64_t)pow((double)branching,levels))/(1-branching);
   OTHER_ASSERT(0<count && count<(1<<30));
   Array<Vector<int,3>> tris;
   tris.preallocate(count);
   int n = base-!closed;
   int lo = 0;
-  for (int level=0;level<levels-1;level++) {
+  for (int level=0;level<levels;level++) {
     const int hi = lo+n+1-closed,
               lom = n+1-closed,
               him = branching*n+1-closed;
