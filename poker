@@ -1,0 +1,28 @@
+#!/usr/bin/env python
+
+from __future__ import division
+from numpy import *
+import pylab
+
+def limit_donkey_equity(k):
+  """In the case of infinite stack size, Alice's optimal strategy is simply to wait for AA.  The resulting
+  win probability function satisfies
+    p[t] = 0, t <= 0
+    p[t] = 1, t >= 1
+    p[t] = a p[2t] + (1-a) p[2t-1], 0 < t < 1
+  where a is the probability of winning with AA (splitting ties).  Important properties:
+    1. p is continuous.
+    2. If t is a dyadic rational, p[t] is a function of simpler dyadic rationals.
+  This provides an easy, superfast way of computing p."""
+  a = 893604787/1048786200
+  p = zeros(1)
+  for k in xrange(k):
+    p = hstack([a*p,a+(1-a)*p])
+  return hstack([p,1])
+
+k = 20
+t = arange(2**k+1)/2**k
+p = limit_donkey_equity(k)
+
+pylab.plot(t,p)
+pylab.show()

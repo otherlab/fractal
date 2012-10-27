@@ -1,0 +1,35 @@
+#!/usr/bin/env python
+'''The fractal code started as part of a tutorial on Python.  This script gives
+a few basic Python examples before jumping into interesting fractals.'''
+
+# The first line above declares this file as an executable python script
+
+import sys # Import a module so that stuff like sys.argv works
+from other.core import * # Pull everything in the other.core module directly into our namespace
+
+print 'Hello world!' # Saul wanted this
+
+if 4 < 5:
+  print 'true'
+
+print 'the first 10 integers =',
+for i in xrange(10):
+  print i,
+print
+
+# Build a list
+x = [n*n for n in xrange(5)]
+print 'squares =',x,x[3]
+
+# Fibonacci numbers
+def fib(n):
+  if n<2:
+    return 1
+  else:
+    return fib(n-1)+fib(n-2)
+print 'fib = %s'%[fib(n) for n in xrange(10)]
+
+# Dictionaries
+d = {'a':4,'b':[5,4,6]}
+print 'd[\'a\'] =',d['a']
+print d[1] # Here an exception is thrown

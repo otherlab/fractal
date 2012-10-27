@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+
+from __future__ import division
+from numpy import *
+import sys
+import pylab
+import optparse
+
+def iterate(system,start,steps):
+  s = start
+  for step in xrange(steps):
+    print 'step %d, size %d'%(step,len(s))
+    s = ''.join(system.get(c,c) for c in s) 
+  return s
+
+def draw(turns,forward,s):
+  theta = 0
+  thetas = []
+  lengths = []
+  for c in s:
+    if c in forward:
+      thetas.append(theta)
+      lengths.append(forward[c])
+    if c in turns:
+      theta += turns[c]
+  return cumsum(lengths*cos(thetas)),cumsum(lengths*sin(thetas))
+
+usage = 'usage: %prog koch|triangle|hilbert|other'
+parser = optparse.OptionParser(usage)
+options,args = parser.parse_args()
+if len(args)!=1:
+  parser.error('expected exactly one "kind" argument')
+kind, = args
+
+if kind=='koch':
+  # http://en.wikipedia.org/wiki/Koch_snowflake#Representation_as_Lindenmayer_system
+  axiom = 'F++F++F'
+  system = {'F':'F-F++F-F'}
+  turns = {'+':pi/3,'-':-pi/3}
+  forward = {'+':1,'-':1}
+  steps = 7
+elif kind=='triangle':
+  # http://en.wikipedia.org/wiki/L-system#Example_6:_Sierpinski_triangle
+  axiom = 'A'
+  system = {'A':'B-A-B','B':'A+B+A'}
+  turns = {'+':pi/3,'-':-pi/3}
+  forward = {'+':1,'-':1}
+  steps = 8
+  steps = 11
+elif kind=='hilbert':
+  axiom = 'A'
+  system = {'A':'-BF+AFA+FB-','B':'+AF-BFB-FA+'}
+  turns = {'+':pi/2, '-':-pi/2}
+  forward = {'F':1}
+  steps = 4
+elif kind=='other':
+  axiom = 'A'
+  system = {'A':'+FA-FA'}
+  turns = {'+':pi/1.2, '-':-pi/1.2}
+  forward = {'F':1,'B':-1}
+  steps = 10
+else:
+  print>>sys.stderr, 'unknown kind = %s'%kind
+  sys.exit(1) 
+
+x,y = draw(turns,forward,iterate(system,axiom,steps))
+pylab.plot(x,y) 
+pylab.show()
