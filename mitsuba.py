@@ -52,6 +52,7 @@ emitter = typed('emitter')
 camera = typed('camera')
 sensor = typed('sensor')
 phase = typed('phase')
+rfilter = typed('rfilter')
 
 def transform(name,*children):
   return tag('transform',name='toWorld',children=children)
