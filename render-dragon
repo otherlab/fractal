@@ -13,6 +13,10 @@ from other.fractal import *
 # ./dragon.py --type dragon --level 17 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.025 --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-fine --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8
 # ./render-dragon --gui 1 --samples 512 --data gen-fine --width 1280 --height 960 --color-seed 194514
 
+# Gold
+# ./dragon.py --type dragon --level 17 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.025 --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-gold --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8 --two-ring 1
+# ./render-dragon --gui 1 --samples 512 --data gen-gold --width 1280 --height 960 --multicolor 0 --integrator erpt --depth 20
+
 # Simple:
 # for i in `seq 0 5`; do ./dragon.py --console 1 --smooth $i --mitsuba-dir gen-simple-$i --type dragon --level 5 --corner-shift 0.05 --size 150 --thickness 0.1 --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 0 --instance 1 --border-crease 1 --border-layers 1 --flip 1 --ground 1 --settle-step 0.01 --origin=-6.6614485991588577,214.62817962567379,78.913429143861407 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0; done
 # for i in `seq 0 5`; do ./render-dragon --data gen-simple-$i --samples 512 --simple-color .8,0,0 --facets 1 -o dragon-simple-$i.exr; done
@@ -67,7 +71,6 @@ height = props.add('height', 480).set_help('height of the rendered image')
 view = props.add('view','front').set_allowed('front down side canopy terdragon-side terdragon-down koch-front koch-side gosper-front gosper-back gosper-side gosper-other custom'.split())
 origin = props.add('origin','160.64605078933045,3.4348049364373598,-16.681267849938735').set_help('custom view')
 target = props.add('target','154.06255051957712,3.1859855253969869,-16.190753540914127').set_help('custom view')
-direct = props.add('direct',False).set_help('use direct integrator only')
 norender = props.add('norender',False).set_abbrev('n')
 samples = props.add('samples',128).set_help('# of samples/pixel, render time is about linear in this')
 skyres = props.add('sky_resolution',512).set_help('resolution of sky environment map')
@@ -81,7 +84,7 @@ data = props.add('data','gen').set_help('data directory')
 facets = props.add('facets',False).set_help('use triangle normals')
 depth = props.add('depth',10).set_help('maximum reflection depth')
 two_stage = props.add('two_stage',False).set_help('use two stage pssmlt')
-integrator_type = props.add('integrator','erpt').set_allowed('pssmlt erpt'.split())
+integrator_type = props.add('integrator','path').set_allowed('pssmlt erpt path direct'.split())
 sun_only = props.add('sun_only',False)
 sphere_sun = props.add('sphere_sun',False)
 sun_scale = props.add('sun_scale',0.)
@@ -174,14 +177,20 @@ sun_radius = sun_closer_factor * 6.955e8
 
 # Generate scene
 open(data()+'/dragon.xml','w').write(scene_version('0.4.1',
-  select(direct(),
-    integrator('direct', fields(maxDepth=100, rrDepth=5, luminaireSamples=1, bsdfSamples=1)),
-    select(integrator_type()=='pssmlt',
-      integrator('pssmlt' if 1 else 'mlt',
-        fields(maxDepth=depth(),twoStage=two_stage())),
-      integrator('erpt',
-        fields(maxDepth=depth(),manifoldPerturbation=True,lensPerturbation=False,multiChainPerturbation=False,causticPerturbation=False,
-               chainLength=200,directSamples=128,numChains=4.,probFactor=120.)))),
+  {'pssmlt':
+    integrator('pssmlt',
+      fields(maxDepth=depth(),twoStage=two_stage())),
+   'erpt':
+    integrator('erpt',
+      fields(maxDepth=depth(),manifoldPerturbation=True,lensPerturbation=False,multiChainPerturbation=False,causticPerturbation=False,
+             chainLength=200,directSamples=128,numChains=4.,probFactor=120.)),
+   'path':
+    integrator('path',
+      fields(maxDepth=depth())),
+   'direct':
+    integrator('direct',
+      fields(maxDepth=100,rrDepth=5,luminaireSamples=1,bsdfSamples=1))
+  }[integrator_type()],
 
   sensor('perspective',
     fields(nearClip=0.1, farClip=30000., fov=fov),

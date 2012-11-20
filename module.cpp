@@ -180,7 +180,7 @@ static Tuple<Ref<TriangleMesh>,Array<TV3>,Array<T>> make_manifold(const Triangle
   return tuple(new_<TriangleMesh>(tris2),X2,thick2);
 }
 
-static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const TriangleMesh& mesh, RawArray<const TV3> X, RawArray<const T> thickness, const int count) {
+static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const TriangleMesh& mesh, RawArray<const TV3> X, RawArray<const T> thickness, const int count, const bool two_ring) {
   const T tolerance = 1e-4;
   OTHER_ASSERT(count>=3);
   OTHER_ASSERT(mesh.nodes()==X.size());
@@ -224,7 +224,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
       add_rotated_neighbors(sorted_neighbors[verts[i]],vert_map,verts);
     // Collect two ring vertices adjacent to extraordinary vertices to account for the larger stencil of modified Loop subdivision
     for (int i : range(ours.size(),verts.size()))
-      if (sorted_neighbors[verts[i]].size()!=6)
+      if (two_ring || sorted_neighbors[verts[i]].size()!=6)
         add_rotated_neighbors(sorted_neighbors[verts[i]],vert_map,verts);
     // Compute signature
     for (int i : verts) {
