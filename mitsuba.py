@@ -29,7 +29,7 @@ def scene_version(version,*children):
 def scene(*children):
   return scene_version('0.3.0',*children)
 
-field_types = {int:'integer',float:'float',str:'string',bool:'boolean'}
+field_types = {int:'integer',int64:'integer',float:'float',float64:'float',str:'string',bool:'boolean'}
 def fields(**fields):
   def convert(v):
     if type(v)==bool:

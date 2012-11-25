@@ -39,6 +39,7 @@ border_layers = props.add('border_layers',1).set_category('fractal')
 flip = props.add('flip',False).set_category('fractal')
 curve_debug = props.add('curve_debug',-1).set_category('fractal')
 two_ring = props.add('two_ring',False).set_category('fractal')
+rearrange = props.add('rearrange',zeros(2)).set_category('fractal')
 
 ground = props.add('ground',False).set_category('render')
 settle_step = props.add('settle_step',.01).set_category('render')
@@ -162,6 +163,10 @@ def instances():
   m,X,thick,_ = mesh()
   with Log.scope('classify'):
     _,interior,boundary = classify_loop_patches(m,X,thick,1+branching(),two_ring())
+    if any(rearrange()):
+      i,b = map(int,rearrange())
+      interior = interior[:i]+boundary[:b]+interior[i:]+boundary[b:]
+      boundary = []
     return interior,boundary
 
 def closed_mesh():

@@ -66,8 +66,8 @@ from other.fractal import *
 # Define properties
 props = PropManager()
 sun_direction = props.add('sun_direction',(.1,.1,1))
-width = props.add('width', 640).set_help('width of the rendered image')
-height = props.add('height', 480).set_help('height of the rendered image')
+width = props.add('width',640).set_help('width of the rendered image')
+height = props.add('height',480).set_help('height of the rendered image')
 view = props.add('view','front').set_allowed('front down side canopy terdragon-side terdragon-down koch-front koch-side gosper-front gosper-back gosper-side gosper-other custom'.split())
 origin = props.add('origin','160.64605078933045,3.4348049364373598,-16.681267849938735').set_help('custom view')
 target = props.add('target','154.06255051957712,3.1859855253969869,-16.190753540914127').set_help('custom view')
@@ -88,6 +88,10 @@ integrator_type = props.add('integrator','path').set_allowed('pssmlt erpt path d
 sun_only = props.add('sun_only',False)
 sphere_sun = props.add('sphere_sun',False)
 sun_scale = props.add('sun_scale',0.)
+tile_size = props.add('tile_size',1000).set_help('base size of a tile in tiled mode')
+tile_overlap = props.add('tile_overlap',10).set_help('half overlap of adjacent tiles')
+tile_id = props.add('tile',-1).set_help('which tile to render')
+mask = props.add('mask','').set_help('render only pixels specified by the mask')
 parser.parse(props,'Render a developed fractal curve.',positional=[view])
 
 # View
@@ -175,8 +179,27 @@ sun_closer_factor = 1e-4
 sun_distance = sun_closer_factor * 1.496e11
 sun_radius = sun_closer_factor * 6.955e8
 
+# Tile details
+if tile_id()>=0:
+  image_shape = array([width(),height()])
+  tiles = (image_shape+tile_size()-1)//tile_size()
+  tile = array([tile_id()//tiles[1],tile_id()%tiles[1]])
+  assert all(0<=tile) and all(tile<tiles)
+  tile_start = maximum(0,tile_size()*tile-tile_overlap())
+  tile_end = minimum(image_shape,tile_size()*(tile+1)+tile_overlap())
+  tile_size = tile_end-tile_start
+else:
+  tile_start = tile_size = zeros(2)
+
+# Construct sampler
+samp = sampler('independent' if integrator_type()=='pssmlt' else 'ldsampler',
+  fields(sampleCount=samples()))
+if mask():
+  samp = sampler('masked',fields(maskImage=mask()),samp)
+
 # Generate scene
-open(data()+'/dragon.xml','w').write(scene_version('0.4.1',
+scene_file = data()+'/dragon%s.xml'%('-%d'%tile_id() if tile_id()>=0 else '')
+open(scene_file,'w').write(scene_version('0.4.1',
   {'pssmlt':
     integrator('pssmlt',
       fields(maxDepth=depth(),twoStage=two_stage())),
@@ -198,9 +221,10 @@ open(data()+'/dragon.xml','w').write(scene_version('0.4.1',
       lookAt(origin=origin,target=target,up=up)),
     film('hdrfilm',
       fields(width=width(),height=height(),banner=False),
+      skipif(tile_id()<0,
+        fields(cropOffsetX=tile_start[0],cropOffsetY=tile_start[1],cropWidth=tile_size[0],cropHeight=tile_size[1])),
       rfilter('gaussian')),
-    sampler('independent' if integrator_type()=='pssmlt' else 'ldsampler',
-      fields(sampleCount=samples()))),
+    samp),
 
   skipif(sun_only() and sphere_sun(),
     emitter('sky' if sphere_sun() else 'sunsky',
@@ -256,8 +280,8 @@ if not norender():
   if not output():
     output.set(view()+'.exr')
   if gui():
-    cmd = ['mtsgui']+options().split()+[data()+'/dragon.xml']
+    cmd = ['mtsgui']+options().split()+[scene_file]
   else:
-    cmd = ['mitsuba','-o',output()]+options().split()+[data()+'/dragon.xml']
+    cmd = ['mitsuba','-o',output()]+options().split()+[scene_file]
   print ' '.join(cmd)
   subprocess.call(cmd)
