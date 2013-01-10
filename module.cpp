@@ -2,6 +2,7 @@
 // Module fractal
 //#####################################################################
 #include <other/core/python/module.h>
+#include <other/core/python/wrap.h>
 #include <other/core/mesh/TriangleMesh.h>
 #include <other/core/openmesh/TriMesh.h>
 #include <other/core/python/stl.h>
