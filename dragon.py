@@ -6,6 +6,7 @@ import sys
 import traceback
 from other.core import *
 from other.gui import *
+from other.gui.show_tree import *
 from other.core.value import parser
 from other.core.openmesh import *
 from other.fractal import *
@@ -39,14 +40,14 @@ border_layers = props.add('border_layers',1).set_category('fractal')
 flip = props.add('flip',False).set_category('fractal')
 curve_debug = props.add('curve_debug',-1).set_category('fractal')
 two_ring = props.add('two_ring',False).set_category('fractal')
-rearrange = props.add('rearrange',zeros(2)).set_category('fractal')
+rearrange = props.add('rearrange',zeros(2)).set_category('fractal').set_hidden(1)
 
 ground = props.add('ground',False).set_category('render')
 settle_step = props.add('settle_step',.01).set_category('render')
 mitsuba_dir = props.add('mitsuba_dir','').set_category('render')
-origin = props.add('origin',(0,0,0)).set_category('render')
-target = props.add('target',(0,0,0)).set_category('render')
-rotation = props.add('rotation',Rotation.identity(3)).set_category('render')
+origin = props.add('origin',(0,0,0)).set_category('render').set_hidden(1)
+target = props.add('target',(0,0,0)).set_category('render').set_hidden(1)
+rotation = props.add('rotation',Rotation.identity(3)).set_category('render').set_hidden(1)
 console = props.add('console',False).set_category('render').set_help('skip gui')
 
 @cache
@@ -448,6 +449,9 @@ def load_misc(props_set):
     else:
       main.view.show_all(True)
 
+def dump():
+  thicken_instances.dump(0)
+
 if __name__=='__main__':
   Log.configure('fractal',0,0,100)
   props_set = parser.parse(props,'Dragon curve visualizer')
@@ -469,6 +473,8 @@ if __name__=='__main__':
     main.add_menu_item('File','Save camera and command',save_misc,'Ctrl+c')
     main.add_menu_item('File','Save mitsuba data',save_mitsuba,'Ctrl+m')
     main.add_menu_item('Edit','Settle (fall down)',settle,'Ctrl+f')
+    main.add_menu_item('Edit','Dump dependencies',dump,'Ctrl+d')
+    main.add_menu_item('Edit','Show dependencies',curry(show_tree,main,True),'Ctrl+t')
     load_misc(props_set)
     main.init()
     app.run()
