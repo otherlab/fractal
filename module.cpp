@@ -11,18 +11,17 @@
 #include <other/core/structure/UnionFind.h>
 #include <other/core/utility/curry.h>
 #include <other/core/utility/Log.h>
+#include <other/core/utility/tr1.h>
 #include <other/core/vector/Frame.h>
 #include <other/core/vector/Matrix4x4.h>
 #include <other/core/vector/normalize.h>
 #include <other/core/solver/powell.h>
-#include <tr1/unordered_map>
 #include <vector>
 using namespace other;
 
 typedef real T;
 typedef Vector<T,2> TV2;
 typedef Vector<T,3> TV3;
-using std::tr1::unordered_map;
 using std::vector;
 using Log::cout;
 using std::endl;
@@ -92,7 +91,7 @@ static Ref<TriangleMesh> branching_mesh(const int branching, const int levels, c
   const int64_t count = (base-!closed)*(1+branching)*(1-(int64_t)pow((double)branching,levels))/(1-branching);
   OTHER_ASSERT(0<count && count<(1<<30));
   Array<Vector<int,3>> tris;
-  tris.preallocate(count);
+  tris.preallocate(int(count));
   int n = base-!closed;
   int lo = 0;
   for (int level=0;level<levels;level++) {
