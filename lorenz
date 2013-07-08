@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+
+from __future__ import division
+from other.core import *
+from other.core.value import parser
+from other.gui import *
+from OpenGL import GL
+import scipy.integrate
+import sys
+
+# Properties
+props = PropManager()
+sigma = props.add('sigma',10.)
+rho = props.add('rho',28.)
+beta = props.add('beta',8/3)
+length = props.add('length',100)
+resolution = props.add('resolution',10000)
+skip = props.add('skip',.1)
+parser.parse(props,'Lorenz attractor visualization')
+
+@cache
+def curve():
+  s,p,b = sigma(),rho(),beta()
+  def f((x,y,z),t):
+    return s*(y-x),x*(p-z)-y,x*y-b*z
+  random.seed(17341)
+  X0 = .1*random.randn(3)
+  t = linspace(0,length(),resolution())
+  X = scipy.integrate.odeint(f,X0,t)
+  X = X[int(skip()*len(X)):]
+  return X
+
+class LorenzScene(Scene):
+  def bounding_box(self):
+    return bounding_box(curve()) 
+  def render(self,*args):
+    X = curve()
+    color = wheel_color(linspace(0,1,len(X)))
+    GL.glBegin(GL.GL_LINE_STRIP)
+    gl_colored_vertices(color,X)
+    GL.glEnd() 
+
+@cache
+def mesh():
+  n = resolution()
+  n = n-int(skip()*n)
+  segs = empty((n-1,2),dtype=int32)
+  segs[:,0] = arange(n-1)
+  segs[:,1] = arange(n-1)+1
+  return SegmentMesh(segs)
+
+def main():
+  app = QEApp(sys.argv,True)
+  main = MainWindow(props)
+  main.view.add_scene('lorenz',LorenzScene())
+  #main.view.add_scene('lorenz',MeshScene(props,mesh,curve,(1,0,0),(1,0,0)))
+  main.init()
+  app.run()
+
+if __name__=='__main__':
+  main()
