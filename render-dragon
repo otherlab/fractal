@@ -63,6 +63,17 @@ from other.fractal import *
 # ./dragon.py --type gosper --level 5 --scale-level 4 --smooth 4 --corner-shift 0.01 --thickness 0.29999999999999999 --colorize 1 --border-layers 8 --ground 1 --mitsuba-dir gen-gosper-side --origin 106.14852758526946,184.76928051872716,86.739813112730673 --target=-1.8413109040436795,8.757791108450121,17.952745587243811 --rotation 0.88225156371353819,-0.40498582943483014,0.019493838923558819,0.23924599584114714
 # ./render-dragon --view gosper-side --data gen-gosper-side --samples 512 --color-seed 184811 --width 1280 --height 960
 
+# Dragon for comparison
+# ./dragon.py --type dragon --level 10 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0 --closed 0 --closed-base 1 --z-scale 0.56995792501637821 --sharp-corners 1 --colorize 0 --instance 0 --border-crease 1 --ground 1 --settle-step 0.01 --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8 --extra-mesh henry-thin-level11.stl --mitsuba-dir gen-dragon-compare-thin-sharp
+# ./dragon.py --type dragon --level 10 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0 --closed 0 --closed-base 1 --z-scale 0.56995792501637821 --sharp-corners 0 --colorize 0 --instance 0 --border-crease 1 --ground 1 --settle-step 0.01 --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8 --extra-mesh henry-thin-level11.stl --mitsuba-dir gen-dragon-compare-thin-round
+# ./dragon.py --type dragon --level 10 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.2 --closed 0 --closed-base 1 --z-scale 0.56995792501637821 --sharp-corners 0 --colorize 0 --instance 0 --border-crease 1 --ground 1 --settle-step 0.01 --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8 --mitsuba-dir gen-dragon-compare-exp-round
+# ./dragon.py --type dragon --level 10 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.7 --thickness-alpha 1 --closed 0 --closed-base 1 --z-scale 0.56995792501637821 --sharp-corners 0 --colorize 0 --instance 0 --border-crease 1 --ground 1 --settle-step 0.01 --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8 --mitsuba-dir gen-dragon-compare-const-round
+# ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-thin-sharp  --width 1280 --height 960 --two-sided 1 --simple-color .8,0,0 --extra 0
+# ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-thin-round  --width 1280 --height 960 --two-sided 1 --simple-color .8,0,0 --extra 0
+# ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-exp-round   --width 1280 --height 960 --two-sided 0 --simple-color .8,0,0 --extra 0
+# ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-const-round --width 1280 --height 960 --two-sided 0 --simple-color .8,0,0 --extra 0
+# ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-const-round --width 1280 --height 960 --two-sided 1 --simple-color .8,0,0 --extra 1
+
 # Define properties
 props = PropManager()
 sun_direction = props.add('sun_direction',(.1,.1,1))
@@ -92,6 +103,8 @@ tile_size = props.add('tile_size',1000).set_help('base size of a tile in tiled m
 tile_overlap = props.add('tile_overlap',10).set_help('half overlap of adjacent tiles')
 tile_id = props.add('tile',-1).set_help('which tile to render')
 mask = props.add('mask','').set_help('render only pixels specified by the mask')
+two_sided = props.add('two_sided',False).set_help('render both sides of the surface')
+extra = props.add('extra',False).set_help('render extra mesh')
 parser.parse(props,'Render a developed fractal curve.',positional=[view])
 
 # View
@@ -167,7 +180,7 @@ reps = int(open(data()+'/count').read())
 # Generate colors
 if multicolor:
   random.seed(color_seed())
-  colors = wheel_color(random.uniform(0,1,size=reps))
+  colors = wheel_color(random.uniform(0,1,size=max(1,reps)))
   if any(simple_color()):
     colors[:] = simple_color()
 
@@ -196,6 +209,20 @@ samp = sampler('independent' if integrator_type()=='pssmlt' else 'ldsampler',
   fields(sampleCount=samples()))
 if mask():
   samp = sampler('masked',fields(maskImage=mask()),samp)
+
+# bsdf helpers
+def twosided(name,inner):
+  if two_sided():
+    return bsdf(name,'twosided',inner)
+  return inner
+inner_suffix = '-inner' if two_sided() else ''
+def one_bsdf(i):
+  return select(multicolor(),
+           twosided('bsdf-%d'%i,
+             bsdf('bsdf-%d'%i+inner_suffix,'diffuse',
+               rgb('reflectance',colors[i]))),
+           ref('mono'))
+
 
 # Generate scene
 scene_file = data()+'/dragon%s.xml'%('-%d'%tile_id() if tile_id()>=0 else '')
@@ -249,31 +276,40 @@ open(scene_file,'w').write(scene_version('0.4.1',
   skipif(view()=='canopy',
     shape('disk',
       transform('toWorld',scale(100000*ones(3))),
-      select(1,
-        bsdf('ground','plastic',
-          rgb('diffuseReflectance',.1*ones(3))),
-        bsdf('ground','conductor',
-          fields(material='Au'))))),
+      twosided('ground',
+        select(1,
+          bsdf('ground'+inner_suffix,'plastic',
+            rgb('diffuseReflectance',.1*ones(3))),
+          bsdf('ground'+inner_suffix,'conductor',
+            fields(material='Au')))))),
 
   # Gold
-  select(1,
-    bsdf('mono','conductor',
-      fields(material='Au')),
-    bsdf('mono','roughconductor',
-      fields(material='Au',alpha=.01))),
+  twosided('mono',
+    select(1,
+      bsdf('mono'+inner_suffix,'conductor',
+        fields(material='Au')),
+      bsdf('mono'+inner_suffix,'roughconductor',
+        fields(material='Au',alpha=.01)))),
 
-  # Shape groups
-  concat((shapegroup('group-%d'%i,
+  select(extra(),
+    # Extra mesh
     shape('obj',
-      fields(filename='rep-%d.obj'%i,faceNormals=facets()),
-      select(multicolor(),
-        bsdf('bsdf-%d'%i,'diffuse',
-          rgb('reflectance',colors[i])),
-        ref('mono')))
-    ) for i in xrange(reps))),
+      fields(filename='extra.obj',maxSmoothAngle=30.),
+      one_bsdf(0)),
 
-  # Instances
-  concat((include('instances-%d.xml'%i) for i in xrange(reps)))))
+    select(reps==0,
+      shape('obj',
+        fields(filename='single.obj',maxSmoothAngle=30.),
+        one_bsdf(0)),
+      concat((
+        # Shape groups
+        concat((shapegroup('group-%d'%i,
+          shape('obj',
+            fields(filename='rep-%d.obj'%i,faceNormals=facets()),
+            one_bsdf(i))
+          ) for i in xrange(reps))),
+        # Instances
+        concat((include('instances-%d.xml'%i) for i in xrange(reps)))))))))
 
 # Run mitsuba
 if not norender():

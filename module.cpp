@@ -3,6 +3,7 @@
 //#####################################################################
 #include <other/core/python/module.h>
 #include <other/core/python/wrap.h>
+#include <other/core/mesh/SegmentMesh.h>
 #include <other/core/mesh/TriangleMesh.h>
 #include <other/core/openmesh/TriMesh.h>
 #include <other/core/python/stl.h>
@@ -354,6 +355,17 @@ static Tuple<Ref<TriangleMesh>,Array<TV3>> torus_mesh(const T R, const T r, cons
   return tuple(new_<TriangleMesh>(tris),X);
 }
 
+static Array<const int> boundary_curve_at_height(const TriangleMesh& mesh, RawArray<const TV3> X, const T z) {
+  const T tolerance = 1e-5;
+  Array<Vector<int,2>> curve;
+  for (const auto s : mesh.boundary_mesh()->elements)
+    if (abs(X[s.x].z-z)<tolerance && abs(X[s.y].z-z)<tolerance)
+      curve.append(s);
+  const auto curves = new_<SegmentMesh>(curve)->polygons();
+  OTHER_ASSERT(curves.x.size()==0 && curves.y.size()==1);
+  return curves.y.flat;
+}
+
 OTHER_PYTHON_MODULE(other_fractal) {
   OTHER_FUNCTION(boundary_edges_to_faces)
   OTHER_FUNCTION(iterate_L_system)
@@ -363,4 +375,5 @@ OTHER_PYTHON_MODULE(other_fractal) {
   OTHER_FUNCTION(settle_instances)
   OTHER_FUNCTION(torus_mesh)
   OTHER_FUNCTION(make_manifold)
+  OTHER_FUNCTION(boundary_curve_at_height)
 }

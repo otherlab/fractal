@@ -50,6 +50,8 @@ target = props.add('target',(0,0,0)).set_category('render').set_hidden(1)
 rotation = props.add('rotation',Rotation.identity(3)).set_category('render').set_hidden(1)
 console = props.add('console',False).set_category('render').set_help('skip gui')
 
+extra_mesh_name = props.add('extra_mesh','').set_category('extra').set_help('draw an extra mesh for comparison')
+
 @cache
 def system():
   # start angle/level, shrink factor, axiom, rules, turns
@@ -146,7 +148,8 @@ def mesh():
     scale = size()/sizes.max()
     Log.write('scale = %g'%scale)
     Log.write('sizes = %g %g %g'%(tuple(scale*sizes)))
-    X = scale*(X-.5*(Xmin+Xmax))
+    center = .5*(Xmin+Xmax)
+    X = scale*(X-center)
     # Compute thickness field
     alpha = thickness_alpha()
     if alpha<0:
@@ -157,11 +160,11 @@ def mesh():
       thick *= alpha**(levels()-scale_level())
     # Label patches
     patch = arange(len(mesh.elements)//(1+branching())).repeat(1+branching())
-    return mesh,X,thick,patch
+    return mesh,X,thick,patch,(scale,center)
 
 @cache
 def instances():
-  m,X,thick,_ = mesh()
+  m,X,thick,_,_ = mesh()
   with Log.scope('classify'):
     _,interior,boundary = classify_loop_patches(m,X,thick,1+branching(),two_ring())
     if any(rearrange()):
@@ -172,7 +175,7 @@ def instances():
 
 def closed_mesh():
   assert not instance()
-  m,X,_,patch = mesh()
+  m,X,_,patch,_ = mesh()
   # Four rotated and translated copies of the dragon curve form a closed curve
   translations = (0,0),(1,0),(1,1),(0,1)
   scale = magnitude(X[0]-X[1])
@@ -201,7 +204,7 @@ def smoothed_mesh(mesh,X,thick,sharp):
 
 @cache
 def smoothed():
-  m,X,thick,patch = closed_mesh() if closed() else mesh() 
+  m,X,thick,patch = closed_mesh() if closed() else mesh()[:4] 
   m,X,thick = smoothed_mesh(m,X,thick,sharp=sharp_corners())
   patch = patch.repeat(4**smooth(),axis=0)
   Log.write('smoothed: triangles = %d, vertices = %d'%(len(m.elements),len(X)))
@@ -276,12 +279,15 @@ def thicken():
     patch = concatenate([patch]*2+[border_patch]*(border_layers()+1))
   return mesh,X,patch
 
-def write_mesh(filename,mesh,X,normals):
+def write_mesh(filename,mesh,X,normals=None):
   trimesh = TriMesh()
   trimesh.add_vertices(X)
   trimesh.add_faces(mesh.elements)
-  trimesh.set_vertex_normals(normals)
-  trimesh.write_with_normals(filename)
+  if normals is None:
+    trimesh.write(filename)
+  else:
+    trimesh.set_vertex_normals(normals)
+    trimesh.write_with_normals(filename)
 
 @cache
 def thicken_instances():
@@ -356,12 +362,15 @@ def ground_mesh():
 def ground_frame():
   if not ground():
     return Frame.identity(3)
-  assert instance()
-  min_dot = inf
   up = up_frame().r.inverse()*(0,0,1)
-  for instances in thicken_instances():
-    for mesh,X,normals,frames in instances:
-      min_dot = min(min_dot,min_instance_dot(X,frames,up))
+  if instance():
+    min_dot = inf
+    for instances in thicken_instances():
+      for _,X,_,frames in instances:
+        min_dot = min(min_dot,min_instance_dot(X,frames,up))
+  else:
+    _,X,_,_,_ = mesh()
+    min_dot = dots(X,up).min()
   return Frames(up*min_dot,up_frame().r.inverse())
 
 def settle():
@@ -387,8 +396,68 @@ class DragonScene(Scene):
   @staticmethod
   @cache
   def bounding_box():
-    _,X,_,_ = mesh()
+    _,X,_,_,_ = mesh()
     return Box(X.min(axis=0),X.max(axis=0))
+
+def raw_extra_mesh():
+  name = extra_mesh_name()
+  assert name
+  tm = TriMesh()
+  tm.read(name) 
+  return TriangleMesh(tm.elements()),tm.X()
+
+def extra_mesh():
+  # If true, use known values for the transforms
+  hack = True
+
+  # Look up extra mesh information
+  emesh,eX = raw_extra_mesh()
+  if not hack:
+    ebase = boundary_curve_at_height(emesh,eX,eX[:,2].min())
+  eX = eX.copy()
+  eX[:,2] *= -1 # Reflect
+  if not hack:
+    # Trim off extra bits on either end
+    n = len(ebase)
+    assert popcount(n)==3
+    trim = min_bit(n-min_bit(n))//2
+    ebase = ebase[trim:-trim]
+    Log.write('ebase = %d'%len(ebase.shape))
+    ebase_scale = magnitude(eX[ebase[-1]]-eX[ebase[0]])
+    Log.write('ebase scale = %r'%ebase_scale)
+  else:
+    ebase_scale = 72.002998352050781
+
+  # Look up information about Loop version
+  if hack:
+    frame = Frame.from_reals((-32.473187150735164,-13.043779937542258,79.059441919669837,0.99999997105133731,0,0,-0.00024061862871912305))
+    base_scale = 77.689804371717031
+    base_height = 150
+  else:
+    base = curves()[-1]
+    Log.write('base = %s, height = %g'%(base.shape,heights()[-1]))
+    _,_,_,_,(scale,center) = mesh()
+    base_height = scale*abs(heights()[0]-heights()[-1])
+    base = scale*(attach_z(base,heights()[-1])-center)
+    base_scale = magnitude(base[-1]-base[0])
+    Log.write('extra base scale = %r'%base_scale)
+    Log.write('extra base height = %r'%base_height)
+
+  # Fix length
+  eX *= base_scale/ebase_scale
+
+  # Fix height
+  ratio = base_height/(eX[:,2].max()-eX[:,2].min())
+  Log.write('extra height ratio = %r'%ratio)
+  eX[:,2] *= ratio
+
+  # Compute frame
+  if not hack:
+    frame = rigid_register(eX[ebase],base[::-1].copy())
+    Log.write('extra frame = %r'%(tuple(frame.reals()),))
+  if ground():
+    frame = ground_frame().inverse()*frame
+  return emesh,frame*eX
 
 def save_mesh():
   try:
@@ -404,20 +473,30 @@ def save_mesh():
 
 def save_mitsuba():
   try:
-    interior,boundary = thicken_instances()
+    if instance():
+      interior,boundary = thicken_instances()
+    else:
+      mesh,X,patch = thicken()
     with Log.scope('mitsuba write'): 
       dir = mitsuba_dir()
       Log.write('dir = %s'%dir)
       assert dir
       if not os.path.exists(dir):
         os.makedirs(dir)
-      open(os.path.join(dir,'count'),'w').write('%d\n'%len(interior+boundary))
-      for i,(mesh,X,normals,frames) in enumerate(interior+boundary):
-        filename = 'rep-%d.obj'%i
-        write_mesh(os.path.join(dir,filename),mesh,X,normals)
-        open(os.path.join(dir,'instances-%d.xml'%i),'w').write(
-          mitsuba.scene_version('0.4.1',
-            mitsuba.instances('group-%d'%i,ground_frame().inverse().matrix()*frames)))
+      if instance():
+        open(os.path.join(dir,'count'),'w').write('%d\n'%len(interior+boundary))
+        for i,(mesh,X,normals,frames) in enumerate(interior+boundary):
+          filename = 'rep-%d.obj'%i
+          write_mesh(os.path.join(dir,filename),mesh,X,normals)
+          open(os.path.join(dir,'instances-%d.xml'%i),'w').write(
+            mitsuba.scene_version('0.4.1',
+              mitsuba.instances('group-%d'%i,ground_frame().inverse().matrix()*frames)))
+      else:
+        open(os.path.join(dir,'count'),'w').write('%d\n'%0)
+        filename = 'single.obj'
+        write_mesh(os.path.join(dir,filename),mesh,ground_frame().inverse()*X)
+      if extra_mesh_name():
+        write_mesh(os.path.join(dir,'extra.obj'),*extra_mesh())
   except:
     traceback.print_exc()
 
@@ -467,6 +546,9 @@ if __name__=='__main__':
     app = QEApp(sys.argv,True)
     main = MainWindow(props)
     main.view.add_scene('dragon',DragonScene())
+    extra = MeshScene(props,cache(lambda:extra_mesh()[0]),cache(lambda:extra_mesh()[1]),(.1,.3,.9),(.1,.9,.2))
+    extra.active = cache(lambda:bool(extra_mesh_name()))
+    main.view.add_scene('extra',extra)
     up_mode = main.view.add_interaction_mode(PlaneInteractionMode('up'),False,'Ctrl+u')
     up_frame = up_mode.frame
     main.add_menu_item('File','Save mesh',save_mesh,'Ctrl+s')
