@@ -1,6 +1,7 @@
 //#####################################################################
 // Module fractal
 //#####################################################################
+#include <other/core/array/NdArray.h>
 #include <other/core/python/module.h>
 #include <other/core/python/wrap.h>
 #include <other/core/mesh/SegmentMesh.h>
@@ -43,15 +44,18 @@ static Array<int> boundary_edges_to_faces(const TriangleMesh& mesh, RawArray<con
   return face;
 }
 
-static vector<Array<Vector<T,2>>> iterate_L_system(real start_angle_per_level, real shrink_factor, const string& axiom, const unordered_map<char,string>& rules, const unordered_map<char,double>& turns, const int levels) {
+static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_level, const T shrink_factor, const string& axiom, const unordered_map<char,string>& rules, const unordered_map<char,double>& turns, const int levels) {
   OTHER_ASSERT(levels>=0);
+  OTHER_ASSERT(start_angle_per_level.rank()<=1 && start_angle_per_level.flat.size());
   vector<Array<TV2>> curves;
   string pattern = axiom;
+  double start_angle = 0;
   for (int level : range(levels+1)) {
     // Trace curve
     TV2 X;
     const double step = pow(shrink_factor,level);
-    double angle = level*start_angle_per_level;
+    double angle = start_angle;
+    start_angle += start_angle_per_level.flat[level%start_angle_per_level.flat.size()];
     Array<TV2> curve;
     curve.append(X);
     for (char c : pattern) {

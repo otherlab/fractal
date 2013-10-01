@@ -74,12 +74,20 @@ from other.fractal import *
 # ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-const-round --width 1280 --height 960 --two-sided 0 --simple-color .8,0,0 --extra 0
 # ./render-dragon --gui 1 --samples 512 --data gen-dragon-compare-const-round --width 1280 --height 960 --two-sided 1 --simple-color .8,0,0 --extra 1
 
+# Sierpinski thickness comparison
+# ./dragon.py --type sierpinski --level 8 --smooth 4 --thickness 0.075 --thickness-alpha 1 --z-scale 0.6 --instance 0 --border-layers 8 --ground 1 --min-dot-override=-8.32499 --mitsuba-dir gen-sierpinski-const --origin 49.790814279239328,37.745462112076865,110.31450473396978 --target 46.830878243261445,33.319459198501335,103.8336842821352 --rotation 0.88684068551546047,-0.45487067454112651,-0.081278951500180857,0 --console 1
+# ./dragon.py --type sierpinski --level 8 --smooth 4 --thickness 0.075 --thickness-alpha -1 --z-scale 0.6 --instance 0 --border-layers 8 --ground 1 --min-dot-override=-8.32499 --mitsuba-dir gen-sierpinski-exp --origin 49.790814279239328,37.745462112076865,110.31450473396978 --target 46.830878243261445,33.319459198501335,103.8336842821352 --rotation 0.88684068551546047,-0.45487067454112651,-0.081278951500180857,0 --console 1
+# ./dragon.py --type sierpinski --level 8 --smooth 4 --thickness 0 --thickness-alpha -1 --z-scale 0.6 --instance 0 --border-layers 8 --ground 1 --min-dot-override=-8.32499 --mitsuba-dir gen-sierpinski-thin --origin 49.790814279239328,37.745462112076865,110.31450473396978 --target 46.830878243261445,33.319459198501335,103.8336842821352 --rotation 0.88684068551546047,-0.45487067454112651,-0.081278951500180857,0 --console 1
+# ./render-dragon --gui 1 --samples 512 --data gen-sierpinski-const --width 1280 --height 960 --two-sided 0 --simple-color .8,0,0 --view sierpinski-thick
+# ./render-dragon --gui 1 --samples 512 --data gen-sierpinski-exp   --width 1280 --height 960 --two-sided 0 --simple-color .8,0,0 --view sierpinski-thick
+# ./render-dragon --gui 1 --samples 512 --data gen-sierpinski-thin  --width 1280 --height 960 --two-sided 1 --simple-color .8,0,0 --view sierpinski-thick
+
 # Define properties
 props = PropManager()
 sun_direction = props.add('sun_direction',(.1,.1,1))
 width = props.add('width',640).set_help('width of the rendered image')
 height = props.add('height',480).set_help('height of the rendered image')
-view = props.add('view','front').set_allowed('front down side canopy terdragon-side terdragon-down koch-front koch-side gosper-front gosper-back gosper-side gosper-other custom'.split())
+view = props.add('view','front').set_allowed('front down side canopy terdragon-side terdragon-down koch-front koch-side gosper-front gosper-back gosper-side gosper-other sierpinski-thick custom'.split())
 origin = props.add('origin','160.64605078933045,3.4348049364373598,-16.681267849938735').set_help('custom view')
 target = props.add('target','154.06255051957712,3.1859855253969869,-16.190753540914127').set_help('custom view')
 norender = props.add('norender',False).set_abbrev('n')
@@ -166,6 +174,10 @@ elif view()=='gosper-other':
   origin = -128.8615749233883,-80.825171896664514,131.82615051315565
   target = 4.2833936284253209,-10.03950863326339,21.144571304972139
   pullback(.3)
+elif view()=='sierpinski-thick':
+  origin = 49.790814279239328,37.745462112076865,110.31450473396978
+  target = 46.830878243261445,33.319459198501335,103.8336842821352
+  pullback(1.5)
 elif view()=='custom':
   origin = origin()
   target = target()
@@ -255,7 +267,8 @@ open(scene_file,'w').write(scene_version('0.4.1',
 
   skipif(sun_only() and sphere_sun(),
     emitter('sky' if sphere_sun() else 'sunsky',
-      fields(stretch=1.1,sunRadiusScale=sun_scale()),
+      fields(stretch=1.1,sunRadiusScale=sun_scale(),
+        scale=(.1 if view()=='sierpinski-thick' else 1.)),
       vector('sunDirection',sun_direction()),
       transform('toWorld',rotate(ytoz)))),
 

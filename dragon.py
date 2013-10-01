@@ -19,7 +19,7 @@ from other.fractal import mitsuba
 # 3. Version for Eugene: ./dragon.py --level 14 --smooth 2 --size 150 --thickness .3 --z-scale .5
 
 props = PropManager()
-ftype = props.add('type','dragon').set_allowed('dragon terdragon koch gosper'.split()).set_category('fractal')
+ftype = props.add('type','dragon').set_allowed('dragon terdragon koch gosper sierpinski'.split()).set_category('fractal')
 levels = props.add('level',4).set_category('fractal')
 scale_level = props.add('scale_level',-1).set_category('fractal')
 smooth = props.add('smooth',0).set_category('fractal')
@@ -43,11 +43,12 @@ two_ring = props.add('two_ring',False).set_category('fractal')
 rearrange = props.add('rearrange',zeros(2)).set_category('fractal').set_hidden(1)
 
 ground = props.add('ground',False).set_category('render')
+min_dot_override = props.add('min_dot_override',inf).set_category('render')
 settle_step = props.add('settle_step',.01).set_category('render')
 mitsuba_dir = props.add('mitsuba_dir','').set_category('render')
-origin = props.add('origin',(0,0,0)).set_category('render').set_hidden(1)
-target = props.add('target',(0,0,0)).set_category('render').set_hidden(1)
-rotation = props.add('rotation',Rotation.identity(3)).set_category('render').set_hidden(1)
+origin = props.add('origin',(0,0,0)).set_category('render')
+target = props.add('target',(0,0,0)).set_category('render')
+rotation = props.add('rotation',Rotation.identity(3)).set_category('render')
 console = props.add('console',False).set_category('render').set_help('skip gui')
 
 extra_mesh_name = props.add('extra_mesh','').set_category('extra').set_help('draw an extra mesh for comparison')
@@ -64,6 +65,8 @@ def system():
   elif ftype()=='gosper':
     a = angle(complex(sqrt(25/28),sqrt(3/28)))
     return -a,sqrt(1/7),'fx',{'x':'x+yf++yf-fx--fxfx-yf+','y':'-fx+yfyf++yf+fx--fx-y'},{'+':pi/3,'-':-pi/3}
+  elif ftype()=='sierpinski':
+    return [pi/3,-pi/3],1/2,'xf',{'x':'yf-xf-y','y':'xf+yf+x'},{'+':pi/3,'-':-pi/3}
   assert 0
 
 def heights_helper(levels):
@@ -363,14 +366,17 @@ def ground_frame():
   if not ground():
     return Frame.identity(3)
   up = up_frame().r.inverse()*(0,0,1)
-  if instance():
-    min_dot = inf
-    for instances in thicken_instances():
-      for _,X,_,frames in instances:
-        min_dot = min(min_dot,min_instance_dot(X,frames,up))
-  else:
-    _,X,_,_,_ = mesh()
-    min_dot = dots(X,up).min()
+  min_dot = min_dot_override()
+  if not isfinite(min_dot):
+    if instance():
+      min_dot = inf
+      for instances in thicken_instances():
+        for _,X,_,frames in instances:
+          min_dot = min(min_dot,min_instance_dot(X,frames,up))
+    else:
+      _,X,_,_,_ = mesh()
+      min_dot = dots(X,up).min()
+  Log.write('min dot = %g'%min_dot)
   return Frames(up*min_dot,up_frame().r.inverse())
 
 def settle():
