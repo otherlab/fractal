@@ -5,7 +5,7 @@
 #include <other/core/python/module.h>
 #include <other/core/python/wrap.h>
 #include <other/core/mesh/SegmentMesh.h>
-#include <other/core/mesh/TriangleMesh.h>
+#include <other/core/mesh/TriangleSoup.h>
 #include <other/core/openmesh/TriMesh.h>
 #include <other/core/python/stl.h>
 #include <other/core/structure/Hashtable.h>
@@ -28,7 +28,7 @@ using std::vector;
 using Log::cout;
 using std::endl;
 
-static Array<int> boundary_edges_to_faces(const TriangleMesh& mesh, RawArray<const Vector<int,2>> edges) {
+static Array<int> boundary_edges_to_faces(const TriangleSoup& mesh, RawArray<const Vector<int,2>> edges) {
   Array<int> face(edges.size(),false);
   auto incident = mesh.incident_elements();
   for (int s=0;s<edges.size();s++) {
@@ -90,7 +90,7 @@ static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_leve
   return curves;
 }
 
-static Ref<TriangleMesh> branching_mesh(const int branching, const int levels, const int base, bool closed) {
+static Ref<TriangleSoup> branching_mesh(const int branching, const int levels, const int base, bool closed) {
   OTHER_ASSERT(branching>=2);
   OTHER_ASSERT(levels>=1);
   const int64_t count = (base-!closed)*(1+branching)*(1-(int64_t)pow((double)branching,levels))/(1-branching);
@@ -118,7 +118,7 @@ static Ref<TriangleMesh> branching_mesh(const int branching, const int levels, c
     n *= branching;
   }
   OTHER_ASSERT(tris.size()==count);
-  return new_<TriangleMesh>(tris);
+  return new_<TriangleSoup>(tris);
 }
 
 namespace {
@@ -130,7 +130,7 @@ struct PatchInfo {
 };
 }
 
-typedef vector<Tuple<Ref<TriangleMesh>,Array<TV3>,Array<T>,Array<Matrix<T,4>>>> Instances;
+typedef vector<Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>,Array<Matrix<T,4>>>> Instances;
 
 static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,int>& vert_map, Array<int>& verts) {
   int start = -1;
@@ -153,7 +153,7 @@ static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,i
 }
 
 // Generate one vertex per (triangle,vertex) pair, merging vertices according to edge connectivity
-static Tuple<Ref<TriangleMesh>,Array<TV3>,Array<T>> make_manifold(const TriangleMesh& mesh, RawArray<const TV3> X, RawArray<const T> thick) {
+static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const TriangleSoup& mesh, RawArray<const TV3> X, RawArray<const T> thick) {
   const auto adjacent_elements = mesh.adjacent_elements();
   UnionFind union_find(3*mesh.elements.size());
   for (int t0 : range(mesh.elements.size())) {
@@ -182,10 +182,10 @@ static Tuple<Ref<TriangleMesh>,Array<TV3>,Array<T>> make_manifold(const Triangle
   for (int t : range(mesh.elements.size()))
     for (int i : range(3))
       tris2[t][i] = map[union_find.find(3*t+i)];
-  return tuple(new_<TriangleMesh>(tris2),X2,thick2);
+  return tuple(new_<TriangleSoup>(tris2),X2,thick2);
 }
 
-static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const TriangleMesh& mesh, RawArray<const TV3> X, RawArray<const T> thickness, const int count, const bool two_ring) {
+static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const TriangleSoup& mesh, RawArray<const TV3> X, RawArray<const T> thickness, const int count, const bool two_ring) {
   const T tolerance = 1e-4;
   OTHER_ASSERT(count>=3);
   OTHER_ASSERT(mesh.nodes()==X.size());
@@ -289,7 +289,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
   Instances interior, boundary;
   for (int r : range(reps.size())) {
     const PatchInfo& info = reps[r].x;
-    const auto fixed = make_manifold(new_<TriangleMesh>(info.tris),info.X,info.thick);
+    const auto fixed = make_manifold(new_<TriangleSoup>(info.tris),info.X,info.thick);
     OTHER_ASSERT(fixed.x->nodes()==fixed.y.size());
     OTHER_ASSERT(!fixed.x->nonmanifold_nodes(true).size());
     auto inst = tuple(fixed.x,fixed.y,fixed.z,reps[r].y);
@@ -318,7 +318,7 @@ static TV3 shift_up(TV3 up, RawArray<const T> dup) {
   return (r*Rotation<TV3>::from_rotation_vector(TV3(dup[0],dup[1],0)))*TV3(0,0,1);
 }
 
-static T settling_energy(const vector<Tuple<Ref<TriangleMesh>,Array<const TV3>,Array<const Matrix<T,4>>>>* instances, TV3 up, RawArray<const T> dup) {
+static T settling_energy(const vector<Tuple<Ref<TriangleSoup>,Array<const TV3>,Array<const Matrix<T,4>>>>* instances, TV3 up, RawArray<const T> dup) {
   up = shift_up(up,dup);
   // Slice as far down as possible
   T ground = inf;
@@ -335,13 +335,13 @@ static T settling_energy(const vector<Tuple<Ref<TriangleMesh>,Array<const TV3>,A
   return energy;
 }
 
-static TV3 settle_instances(const vector<Tuple<Ref<TriangleMesh>,Array<const TV3>,Array<const Matrix<T,4>>>>& instances, const TV3 up, const T step) {
+static TV3 settle_instances(const vector<Tuple<Ref<TriangleSoup>,Array<const TV3>,Array<const Matrix<T,4>>>>& instances, const TV3 up, const T step) {
   Array<T> dup(2);
   powell(curry(settling_energy,&instances,up),dup,step,1e-5,0,20);
   return shift_up(up,dup);
 }
 
-static Tuple<Ref<TriangleMesh>,Array<TV3>> torus_mesh(const T R, const T r, const int N, const int n) {
+static Tuple<Ref<TriangleSoup>,Array<TV3>> torus_mesh(const T R, const T r, const int N, const int n) {
   Array<TV3> X(N*n,false);
   Array<Vector<int,3>> tris(2*N*n,false);
   const T dA = 2*pi/N,
@@ -356,10 +356,10 @@ static Tuple<Ref<TriangleMesh>,Array<TV3>> torus_mesh(const T R, const T r, cons
       tris[2*I+0] = vec(i*n+j,ii*n+j,ii*n+jj);
       tris[2*I+1] = vec(i*n+j,ii*n+jj,i*n+jj);
     }
-  return tuple(new_<TriangleMesh>(tris),X);
+  return tuple(new_<TriangleSoup>(tris),X);
 }
 
-static Array<const int> boundary_curve_at_height(const TriangleMesh& mesh, RawArray<const TV3> X, const T z) {
+static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawArray<const TV3> X, const T z) {
   const T tolerance = 1e-5;
   Array<Vector<int,2>> curve;
   for (const auto s : mesh.boundary_mesh()->elements)

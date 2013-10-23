@@ -100,7 +100,7 @@ def curves_helper(levels):
     if flip():
       for curve in curves:
         curve[:,1] *= -1
-    # Shift corners inwards 
+    # Shift corners inwards
     for level,curve in enumerate(curves):
       Log.write('level %d, vertices %d'%(level,len(curve)))
       full = concatenate([[curve[-1]],curve,[curve[0]]]) if closed else curve
@@ -192,7 +192,7 @@ def closed_mesh():
   ip[p] = arange(len(p),dtype=int32)
   cX = cX[ip]
   tris = p[tris]
-  return TriangleMesh(tris),cX,patch
+  return TriangleSoup(tris),cX,patch
 
 def smoothed_mesh(mesh,X,thick,sharp):
   for _ in xrange(smooth()):
@@ -207,7 +207,7 @@ def smoothed_mesh(mesh,X,thick,sharp):
 
 @cache
 def smoothed():
-  m,X,thick,patch = closed_mesh() if closed() else mesh()[:4] 
+  m,X,thick,patch = closed_mesh() if closed() else mesh()[:4]
   m,X,thick = smoothed_mesh(m,X,thick,sharp=sharp_corners())
   patch = patch.repeat(4**smooth(),axis=0)
   Log.write('smoothed: triangles = %d, vertices = %d'%(len(m.elements),len(X)))
@@ -218,7 +218,7 @@ def smoothed_instances():
   def smooth_instance((mesh,X,thick,frames),sharp):
     sm,sX,st = smoothed_mesh(mesh,X,thick,sharp)
     norm = sm.vertex_normals(sX)
-    cut = TriangleMesh(sm.elements[:(1+branching())*4**smooth()])
+    cut = TriangleSoup(sm.elements[:(1+branching())*4**smooth()])
     # Rearrange so that all interior vertices come first
     interior = unique(cut.elements)
     is_interior = repeat(False,len(sX))
@@ -229,9 +229,9 @@ def smoothed_instances():
     inv = vmap.copy()
     inv[vmap] = arange(len(vmap),dtype=int32)
     # Apply mapping
-    cut = TriangleMesh(vmap[cut.elements])
+    cut = TriangleSoup(vmap[cut.elements])
     assert cut.nodes()==len(interior)
-    sm = TriangleMesh(vmap[sm.elements])
+    sm = TriangleSoup(vmap[sm.elements])
     return cut,sm,sX[inv],st[inv],norm[inv],frames
   interior,boundary = instances()
   with Log.scope('smoothing'):
@@ -264,7 +264,7 @@ def thicken_mesh(mesh,X,thick,normals,border=None):
   for k in xrange(layers):
     tris.append(vstack([border[k].T[::-1],border[k+1][:,1]]).T)
     tris.append(vstack([border[k+1].T,border[k][:,0]]).T)
-  mesh = TriangleMesh(ascontiguousarray(vstack(tris)))
+  mesh = TriangleSoup(ascontiguousarray(vstack(tris)))
   if 0:
     assert not len(mesh.nonmanifold_nodes(border_crease()))
   return mesh,X,border_nodes
@@ -358,7 +358,7 @@ def render():
 @cache
 def ground_mesh():
   X = 10*size()*asarray([[-1,-1,0],[1,-1,0],[1,1,0],[-1,1,0]])
-  mesh = TriangleMesh([[0,1,2],[0,2,3]])
+  mesh = TriangleSoup([[0,1,2],[0,2,3]])
   return mesh,X
 
 @cache
@@ -409,8 +409,8 @@ def raw_extra_mesh():
   name = extra_mesh_name()
   assert name
   tm = TriMesh()
-  tm.read(name) 
-  return TriangleMesh(tm.elements()),tm.X()
+  tm.read(name)
+  return TriangleSoup(tm.elements()),tm.X()
 
 def extra_mesh():
   # If true, use known values for the transforms
@@ -483,7 +483,7 @@ def save_mitsuba():
       interior,boundary = thicken_instances()
     else:
       mesh,X,patch = thicken()
-    with Log.scope('mitsuba write'): 
+    with Log.scope('mitsuba write'):
       dir = mitsuba_dir()
       Log.write('dir = %s'%dir)
       assert dir
