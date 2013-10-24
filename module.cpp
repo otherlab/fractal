@@ -4,7 +4,7 @@
 #include <other/core/array/NdArray.h>
 #include <other/core/python/module.h>
 #include <other/core/python/wrap.h>
-#include <other/core/mesh/SegmentMesh.h>
+#include <other/core/mesh/SegmentSoup.h>
 #include <other/core/mesh/TriangleSoup.h>
 #include <other/core/openmesh/TriMesh.h>
 #include <other/core/python/stl.h>
@@ -365,7 +365,7 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
   for (const auto s : mesh.boundary_mesh()->elements)
     if (abs(X[s.x].z-z)<tolerance && abs(X[s.y].z-z)<tolerance)
       curve.append(s);
-  const auto curves = new_<SegmentMesh>(curve)->polygons();
+  const auto curves = new_<SegmentSoup>(curve)->polygons();
   OTHER_ASSERT(curves.x.size()==0 && curves.y.size()==1);
   return curves.y.flat;
 }

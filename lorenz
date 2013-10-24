@@ -32,13 +32,13 @@ def curve():
 
 class LorenzScene(Scene):
   def bounding_box(self):
-    return bounding_box(curve()) 
+    return bounding_box(curve())
   def render(self,*args):
     X = curve()
     color = wheel_color(linspace(0,1,len(X)))
     GL.glBegin(GL.GL_LINE_STRIP)
     gl_colored_vertices(color,X)
-    GL.glEnd() 
+    GL.glEnd()
 
 @cache
 def mesh():
@@ -47,7 +47,7 @@ def mesh():
   segs = empty((n-1,2),dtype=int32)
   segs[:,0] = arange(n-1)
   segs[:,1] = arange(n-1)+1
-  return SegmentMesh(segs)
+  return SegmentSoup(segs)
 
 def main():
   app = QEApp(sys.argv,True)
