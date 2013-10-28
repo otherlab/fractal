@@ -1,25 +1,25 @@
 //#####################################################################
 // Module fractal
 //#####################################################################
-#include <other/core/array/NdArray.h>
-#include <other/core/python/module.h>
-#include <other/core/python/wrap.h>
-#include <other/core/mesh/SegmentSoup.h>
-#include <other/core/mesh/TriangleSoup.h>
-#include <other/core/openmesh/TriMesh.h>
-#include <other/core/python/stl.h>
-#include <other/core/structure/Hashtable.h>
-#include <other/core/structure/Tuple.h>
-#include <other/core/structure/UnionFind.h>
-#include <other/core/utility/curry.h>
-#include <other/core/utility/Log.h>
-#include <other/core/utility/tr1.h>
-#include <other/core/vector/Frame.h>
-#include <other/core/vector/Matrix4x4.h>
-#include <other/core/vector/normalize.h>
-#include <other/core/solver/powell.h>
+#include <geode/array/NdArray.h>
+#include <geode/python/module.h>
+#include <geode/python/wrap.h>
+#include <geode/mesh/SegmentSoup.h>
+#include <geode/mesh/TriangleSoup.h>
+#include <geode/openmesh/TriMesh.h>
+#include <geode/python/stl.h>
+#include <geode/structure/Hashtable.h>
+#include <geode/structure/Tuple.h>
+#include <geode/structure/UnionFind.h>
+#include <geode/utility/curry.h>
+#include <geode/utility/Log.h>
+#include <geode/utility/tr1.h>
+#include <geode/vector/Frame.h>
+#include <geode/vector/Matrix4x4.h>
+#include <geode/vector/normalize.h>
+#include <geode/solver/powell.h>
 #include <vector>
-using namespace other;
+using namespace geode;
 
 typedef real T;
 typedef Vector<T,2> TV2;
@@ -32,21 +32,21 @@ static Array<int> boundary_edges_to_faces(const TriangleSoup& mesh, RawArray<con
   Array<int> face(edges.size(),false);
   auto incident = mesh.incident_elements();
   for (int s=0;s<edges.size();s++) {
-    OTHER_ASSERT(incident.valid(edges[s][0]));
+    GEODE_ASSERT(incident.valid(edges[s][0]));
     for (int t : incident[edges[s][0]])
       if (mesh.elements[t].contains(edges[s][1])) {
         face[s] = t;
         goto found;
       }
-    OTHER_ASSERT(false);
+    GEODE_ASSERT(false);
     found:;
   }
   return face;
 }
 
 static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_level, const T shrink_factor, const string& axiom, const unordered_map<char,string>& rules, const unordered_map<char,double>& turns, const int levels) {
-  OTHER_ASSERT(levels>=0);
-  OTHER_ASSERT(start_angle_per_level.rank()<=1 && start_angle_per_level.flat.size());
+  GEODE_ASSERT(levels>=0);
+  GEODE_ASSERT(start_angle_per_level.rank()<=1 && start_angle_per_level.flat.size());
   vector<Array<TV2>> curves;
   string pattern = axiom;
   double start_angle = 0;
@@ -69,7 +69,7 @@ static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_leve
       }
     }
     if (pattern[pattern.size()-1]=='c') {
-      OTHER_ASSERT(magnitude(curve[0]-curve.back())<.01*step);
+      GEODE_ASSERT(magnitude(curve[0]-curve.back())<.01*step);
       curve.pop();
     }
     curves.push_back(curve);
@@ -91,10 +91,10 @@ static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_leve
 }
 
 static Ref<TriangleSoup> branching_mesh(const int branching, const int levels, const int base, bool closed) {
-  OTHER_ASSERT(branching>=2);
-  OTHER_ASSERT(levels>=1);
+  GEODE_ASSERT(branching>=2);
+  GEODE_ASSERT(levels>=1);
   const int64_t count = (base-!closed)*(1+branching)*(1-(int64_t)pow((double)branching,levels))/(1-branching);
-  OTHER_ASSERT(0<count && count<(1<<30));
+  GEODE_ASSERT(0<count && count<(1<<30));
   Array<Vector<int,3>> tris;
   tris.preallocate(int(count));
   int n = base-!closed;
@@ -117,7 +117,7 @@ static Ref<TriangleSoup> branching_mesh(const int branching, const int levels, c
     lo = hi;
     n *= branching;
   }
-  OTHER_ASSERT(tris.size()==count);
+  GEODE_ASSERT(tris.size()==count);
   return new_<TriangleSoup>(tris);
 }
 
@@ -142,7 +142,7 @@ static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,i
       score = *s;
     }
   }
-  OTHER_ASSERT(start>=0);
+  GEODE_ASSERT(start>=0);
   for (int j : range(neighbors.size())) {
     const int a = neighbors[(start+j)%neighbors.size()];
     if (!vert_map.contains(a)) {
@@ -163,7 +163,7 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const Triangle
       if (t1>=0) {
         const auto nodes1 = mesh.elements[t1];
         const int j = nodes1.find(nodes0[(i+1)%3]);
-        OTHER_ASSERT(j>=0);
+        GEODE_ASSERT(j>=0);
         union_find.merge(3*t0+i,3*t1+(j+1)%3);
         union_find.merge(3*t0+(i+1)%3,3*t1+j);
       }
@@ -187,11 +187,11 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const Triangle
 
 static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const TriangleSoup& mesh, RawArray<const TV3> X, RawArray<const T> thickness, const int count, const bool two_ring) {
   const T tolerance = 1e-4;
-  OTHER_ASSERT(count>=3);
-  OTHER_ASSERT(mesh.nodes()==X.size());
-  OTHER_ASSERT(mesh.nodes()==thickness.size());
+  GEODE_ASSERT(count>=3);
+  GEODE_ASSERT(mesh.nodes()==X.size());
+  GEODE_ASSERT(mesh.nodes()==thickness.size());
   const int patches = mesh.elements.size()/count;
-  OTHER_ASSERT(mesh.elements.size()==count*patches);
+  GEODE_ASSERT(mesh.elements.size()==count*patches);
   vector<Tuple<PatchInfo,Array<Matrix<T,4>>>> reps;
   Array<int> names;
   const auto sorted_neighbors = mesh.sorted_neighbors();
@@ -250,7 +250,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
       next:;
     }
     {
-      OTHER_ASSERT(reps.size()<10000);
+      GEODE_ASSERT(reps.size()<10000);
       boundary_count += info.boundary;
       Array<Matrix<T,4>> transforms(1,false);
       transforms[0] = transform;
@@ -290,8 +290,8 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
   for (int r : range(reps.size())) {
     const PatchInfo& info = reps[r].x;
     const auto fixed = make_manifold(new_<TriangleSoup>(info.tris),info.X,info.thick);
-    OTHER_ASSERT(fixed.x->nodes()==fixed.y.size());
-    OTHER_ASSERT(!fixed.x->nonmanifold_nodes(true).size());
+    GEODE_ASSERT(fixed.x->nodes()==fixed.y.size());
+    GEODE_ASSERT(!fixed.x->nonmanifold_nodes(true).size());
     auto inst = tuple(fixed.x,fixed.y,fixed.z,reps[r].y);
     (info.boundary?boundary:interior).push_back(inst);
   }
@@ -301,7 +301,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
 }
 
 static T min_instance_dot(RawArray<const TV3> X, RawArray<const Matrix<T,4>> transforms, const TV3 up) {
-  OTHER_ASSERT(X.size());
+  GEODE_ASSERT(X.size());
   T min_dot = inf;
   for (auto A : transforms) {
     const T upt = dot(up,A.translation());
@@ -313,7 +313,7 @@ static T min_instance_dot(RawArray<const TV3> X, RawArray<const Matrix<T,4>> tra
 }
 
 static TV3 shift_up(TV3 up, RawArray<const T> dup) {
-  OTHER_ASSERT(dup.size()==2);
+  GEODE_ASSERT(dup.size()==2);
   auto r = Rotation<TV3>::from_rotated_vector(TV3(0,0,1),up);
   return (r*Rotation<TV3>::from_rotation_vector(TV3(dup[0],dup[1],0)))*TV3(0,0,1);
 }
@@ -366,18 +366,18 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
     if (abs(X[s.x].z-z)<tolerance && abs(X[s.y].z-z)<tolerance)
       curve.append(s);
   const auto curves = new_<SegmentSoup>(curve)->polygons();
-  OTHER_ASSERT(curves.x.size()==0 && curves.y.size()==1);
+  GEODE_ASSERT(curves.x.size()==0 && curves.y.size()==1);
   return curves.y.flat;
 }
 
-OTHER_PYTHON_MODULE(other_fractal) {
-  OTHER_FUNCTION(boundary_edges_to_faces)
-  OTHER_FUNCTION(iterate_L_system)
-  OTHER_FUNCTION(branching_mesh)
-  OTHER_FUNCTION(classify_loop_patches)
-  OTHER_FUNCTION(min_instance_dot)
-  OTHER_FUNCTION(settle_instances)
-  OTHER_FUNCTION(torus_mesh)
-  OTHER_FUNCTION(make_manifold)
-  OTHER_FUNCTION(boundary_curve_at_height)
+GEODE_PYTHON_MODULE(other_fractal) {
+  GEODE_FUNCTION(boundary_edges_to_faces)
+  GEODE_FUNCTION(iterate_L_system)
+  GEODE_FUNCTION(branching_mesh)
+  GEODE_FUNCTION(classify_loop_patches)
+  GEODE_FUNCTION(min_instance_dot)
+  GEODE_FUNCTION(settle_instances)
+  GEODE_FUNCTION(torus_mesh)
+  GEODE_FUNCTION(make_manifold)
+  GEODE_FUNCTION(boundary_curve_at_height)
 }

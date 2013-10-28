@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 from __future__ import division
-from other.core import *
+from geode import *
 from numpy import *
 
 def indent(lines):

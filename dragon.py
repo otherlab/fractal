@@ -4,13 +4,13 @@ from __future__ import division
 import os
 import sys
 import traceback
-from other.core import *
-from other.gui import *
-from other.gui.show_tree import *
-from other.core.value import parser
-from other.core.openmesh import *
-from other.fractal import *
-from other.fractal import mitsuba
+from geode import *
+from gui import *
+from gui.show_tree import *
+from geode.value import parser
+from geode.openmesh import *
+from fractal import *
+from fractal import mitsuba
 
 # Examples:
 #

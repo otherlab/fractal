@@ -1,5 +1,6 @@
 *.png
 *.pyc
+*.so
 mitsuba.*.log
 gen
 gen-*
