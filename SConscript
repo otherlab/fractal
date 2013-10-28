@@ -1,3 +1,3 @@
 Import('env library')
 
-library(env,'other_fractal',['geode'])
+library(env,'other_fractal',[])
