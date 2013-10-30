@@ -4,7 +4,7 @@
 #include <geode/array/NdArray.h>
 #include <geode/python/module.h>
 #include <geode/python/wrap.h>
-#include <geode/mesh/SegmentMesh.h>
+#include <geode/mesh/SegmentSoup.h>
 #include <geode/mesh/TriangleSoup.h>
 #include <geode/openmesh/TriMesh.h>
 #include <geode/python/stl.h>
@@ -365,7 +365,7 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
   for (const auto s : mesh.boundary_mesh()->elements)
     if (abs(X[s.x].z-z)<tolerance && abs(X[s.y].z-z)<tolerance)
       curve.append(s);
-  const auto curves = new_<SegmentMesh>(curve)->polygons();
+  const auto curves = new_<SegmentSoup>(curve)->polygons();
   GEODE_ASSERT(curves.x.size()==0 && curves.y.size()==1);
   return curves.y.flat;
 }

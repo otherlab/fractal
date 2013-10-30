@@ -47,7 +47,7 @@ def mesh():
   segs = empty((n-1,2),dtype=int32)
   segs[:,0] = arange(n-1)
   segs[:,1] = arange(n-1)+1
-  return SegmentMesh(segs)
+  return SegmentSoup(segs)
 
 def main():
   app = QEApp(sys.argv,True)
