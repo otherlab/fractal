@@ -1,0 +1,141 @@
+#!/usr/bin/env python
+
+from __future__ import division,absolute_import
+from geode import *
+from geode.geometry.platonic import *
+from gui import *
+import subprocess
+import sys
+
+# Useful commands:
+#   convert -delay 4 -loop 0 `seq -f 'blah-%03g.jpg' 1 150` dna-large.gif
+#   convert -crop 320x170+233+52 -resize 10% -delay 4 -loop 0 `seq -f 'blah-%03g.jpg' 1 150` dna-small.gif
+
+# Properties
+props = PropManager()
+z_scale = props.add('z_scale',.5).set_category('dna')
+width = props.add('width',.1).set_category('dna')
+periods = props.add('periods',2).set_category('dna')
+resolution = props.add('resolution',50).set_category('dna')
+spacing = props.add('spacing',10).set_category('dna')
+around = props.add('around',10).set_category('dna')
+capture_frames = props.add('capture_frames',150+10).set_category('dna')
+mode = props.add('mode','cylinder').set_allowed('flat cylinder'.split()).set_category('dna')
+
+# Geometry of B-DNA
+# For details, see http://iopscience.iop.org/1367-2630/15/9/093008/pdf/1367-2630_15_9_093008.pdf
+pitch = pi/180*38
+H_bar = tan(pitch) # tan pitch = H/(2*pi*a), H_bar = H/(2*pi)
+phase = pi/180*140
+bases_per_turn = 10.5
+
+@cache
+def helix_curve():
+  n = periods()
+  t = linspace(0,2*pi*n,num=resolution()*n)
+  X = empty((len(t),3))
+  s = time()
+  X[:,0] = cos(t+s)
+  X[:,1] = sin(t+s)
+  X[:,2] = H_bar*t
+  return X
+
+def span_start(i):
+  s = time()
+  t = 2*pi/bases_per_turn*i
+  return asarray([cos(t+s),sin(t+s),H_bar*t])
+
+@cache
+def helix_mesh():
+  core = helix_curve()
+  if mode()=='cylinder':
+    return cylinder_topology(len(core)-1,around())
+  elif mode()=='flat':
+    return grid_topology(len(core)-1,1)
+
+@cache
+def helix_X():
+  core = helix_curve()
+  if mode()=='cylinder':
+    return revolve_around_curve(core,width(),around())[1]
+  elif mode()=='flat':
+    tangent = core[1:]-core[:-1]
+    tangent = concatenate([[tangent[0]],(tangent[:-1]+tangent[1:])/2,[tangent[-1]]])
+    assert tangent.shape==core.shape
+    outwards = core.copy()
+    outwards[:,2] = 0
+    outwards = normalized(outwards)
+    left = normalized(cross(outwards,tangent))
+    X = empty((len(core),2,3))
+    shift = width()*left
+    X[:,0] = core-shift
+    X[:,1] = core+shift
+    return X.reshape(-1,3)
+
+@cache
+def other_rotation():
+  return Rotation.from_angle_axis(phase,(0,0,1))
+
+@cache
+def other_helix_X():
+  return other_rotation()*helix_X()
+
+def span(i):
+  def span():
+    start = span_start(i)
+    start[:2] *= .99
+    end = other_rotation()*start
+    return open_cylinder_mesh(start,end,.99*width(),around())
+  return cache(span)
+
+def span_scene(i,color):
+  sp = span(i)
+  return MeshScene(props,cache(lambda:sp()[0]),cache(lambda:sp()[1]),color,color)
+
+# View
+app = QEApp(sys.argv,True)
+main = MainWindow(props)
+main.resize_timeline(80)
+main.timeline.info.set_loop(1)
+main.view.clear_color = zeros(3)
+props.get('last_frame').set(1000000)
+frame = props.get('frame')
+frame_rate = props.get('frame_rate')
+
+# Define time so that 150 frames is 2pi
+time = cache(lambda:2*pi/150*frame())
+
+# Key bindings
+main.add_menu_item('Timeline','Play/Stop',main.timeline.info.set_play,'Ctrl+p')
+main.add_menu_item('Timeline','Step back',main.timeline.info.go_back,'Ctrl+< Ctrl+,')
+main.add_menu_item('Timeline','Step forward',main.timeline.info.go_forward,'Ctrl+.') # Possibly due to a Qt bug, 'Ctrl+> Ctrl+.' doesn't work
+
+# Video capture
+def capture():
+  print 'capturing'
+  n = capture_frames()
+  i = [0]
+  def grab():
+    filename = 'capture-%03d.png'%i[0]
+    print '  writing %s'%filename
+    subprocess.check_output(['scrot','-u',filename])
+    i[0] += 1
+    if i[0]==n:
+      main.view.post_render = None
+      main.timeline.info.set_play()
+  main.view.post_render = grab
+  main.timeline.info.set_play()
+main.add_menu_item('Capture','Capture',capture,'Ctrl+g')
+
+# Add scenes
+blue = .1,.1,1
+green = .1,1,.1
+red = 1,.1,.1
+main.view.add_scene('helix 0',MeshScene(props,helix_mesh,helix_X,blue,blue))
+main.view.add_scene('helix 1',MeshScene(props,helix_mesh,other_helix_X,green,green))
+for i in xrange(int(bases_per_turn*periods())):
+  main.view.add_scene('span %d'%i,span_scene(i,color=red))
+
+# Launch!
+main.init()
+app.run()
