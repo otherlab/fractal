@@ -8,18 +8,21 @@ import subprocess
 import sys
 
 # Useful commands:
-#   convert -delay 4 -loop 0 `seq -f 'blah-%03g.jpg' 1 150` dna-large.gif
-#   convert -crop 320x170+233+52 -resize 10% -delay 4 -loop 0 `seq -f 'blah-%03g.jpg' 1 150` dna-small.gif
+#
+# convert -crop 211x112+740+231 +repage -delay 4 -loop 0 `seq -f 'capture-%03g.png' 0 149` dna-large.gif
+# convert -crop 211x112+740+231 +repage -resize 32x17 -delay 4 -loop 0 `seq -f 'capture-%03g.png' 0 149` dna-small.gif
 
 # Properties
 props = PropManager()
 z_scale = props.add('z_scale',.5).set_category('dna')
-width = props.add('width',.1).set_category('dna')
+backbone_width = props.add('backbone_width',.15).set_category('dna')
+base_pair_width = props.add('base_pair_width',.1).set_category('dna')
 periods = props.add('periods',2).set_category('dna')
 resolution = props.add('resolution',50).set_category('dna')
 spacing = props.add('spacing',10).set_category('dna')
 around = props.add('around',10).set_category('dna')
 capture_frames = props.add('capture_frames',150+10).set_category('dna')
+seed = props.add('seed',31833).set_category('dna')
 mode = props.add('mode','cylinder').set_allowed('flat cylinder'.split()).set_category('dna')
 
 # Geometry of B-DNA
@@ -28,6 +31,22 @@ pitch = pi/180*38
 H_bar = tan(pitch) # tan pitch = H/(2*pi*a), H_bar = H/(2*pi)
 phase = pi/180*140
 bases_per_turn = 10.5
+
+bases = 'atgc'
+# http://wiki.answers.com/Q/What_is_the_color_of_the_base_pairs_in_DNA
+if 0: # Jellybean colors
+  base_colors = ((0,0,1),(1,1,0),(0,1,0),(1,0,0))
+  backbone_colors = ((.75,0,.25),(.25,0,.75))
+else:
+  base_colors = ((.2,.1,.9),(.9,.8,0),(0,.8,.2),(.9,.2,.1))
+  backbone_colors = ((.9,.1,.25),(.4,.1,.55))
+  backbone_colors = ((.75,0,.25),(.25,0,.75))
+
+@cache
+def sequence():
+  n = 100
+  random.seed(seed())
+  return random.randint(4,size=n)
 
 @cache
 def helix_curve():
@@ -57,7 +76,7 @@ def helix_mesh():
 def helix_X():
   core = helix_curve()
   if mode()=='cylinder':
-    return revolve_around_curve(core,width(),around())[1]
+    return revolve_around_curve(core,backbone_width(),around())[1]
   elif mode()=='flat':
     tangent = core[1:]-core[:-1]
     tangent = concatenate([[tangent[0]],(tangent[:-1]+tangent[1:])/2,[tangent[-1]]])
@@ -67,7 +86,7 @@ def helix_X():
     outwards = normalized(outwards)
     left = normalized(cross(outwards,tangent))
     X = empty((len(core),2,3))
-    shift = width()*left
+    shift = backbone_width()*left
     X[:,0] = core-shift
     X[:,1] = core+shift
     return X.reshape(-1,3)
@@ -80,16 +99,19 @@ def other_rotation():
 def other_helix_X():
   return other_rotation()*helix_X()
 
-def span(i):
+def span(i,j):
   def span():
-    start = span_start(i)
-    start[:2] *= .99
-    end = other_rotation()*start
-    return open_cylinder_mesh(start,end,.99*width(),around())
+    x0 = span_start(i)
+    x0[:2] *= .99
+    x1 = other_rotation()*x0
+    mid = (x0+x1)/2
+    R = base_pair_width()
+    return open_cylinder_mesh(mid,(x0,x1)[j],R,around())
   return cache(span)
 
-def span_scene(i,color):
-  sp = span(i)
+def span_scene(i,j):
+  sp = span(i,j)
+  color = base_colors[sequence()[i]^j]
   return MeshScene(props,cache(lambda:sp()[0]),cache(lambda:sp()[1]),color,color)
 
 # View
@@ -128,13 +150,12 @@ def capture():
 main.add_menu_item('Capture','Capture',capture,'Ctrl+g')
 
 # Add scenes
-blue = .1,.1,1
-green = .1,1,.1
-red = 1,.1,.1
-main.view.add_scene('helix 0',MeshScene(props,helix_mesh,helix_X,blue,blue))
-main.view.add_scene('helix 1',MeshScene(props,helix_mesh,other_helix_X,green,green))
+for j in 0,1:
+  color = backbone_colors[j]
+  main.view.add_scene('helix %d'%j,MeshScene(props,helix_mesh,(helix_X,other_helix_X)[j],color,color))
 for i in xrange(int(bases_per_turn*periods())):
-  main.view.add_scene('span %d'%i,span_scene(i,color=red))
+  for j in 0,1:
+    main.view.add_scene('span %d %d'%(i,j),span_scene(i,j))
 
 # Launch!
 main.init()
