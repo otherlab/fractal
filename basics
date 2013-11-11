@@ -5,7 +5,7 @@ a few basic Python examples before jumping into interesting fractals.'''
 # The first line above declares this file as an executable python script
 
 import sys # Import a module so that stuff like sys.argv works
-from geode import * # Pull everything in the other.core module directly into our namespace
+from geode import * # Pull everything in the geode module directly into our namespace
 
 print 'Hello world!' # Saul wanted this
 
