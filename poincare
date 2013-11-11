@@ -1,0 +1,221 @@
+#!/usr/bin/env python
+
+from __future__ import division,print_function,unicode_literals
+from geode.value import parser
+from geode import *
+
+# Properties
+props = PropManager()
+parser.parse(props,'Hyperbolic triangulation layout',)
+
+c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
+def splitcomplex(z):
+  w = empty(z.shape+(2,),dtype=c2r_dtype[z.dtype])
+  mergecomplex(w)[...] = z
+  return w
+
+r2c_dtype = {dtype(float32):dtype(complex64),dtype(float64):dtype(complex128)}
+def mergecomplex(z):
+  z = asarray(z)
+  assert z.shape[-1]==2
+  return z.view(r2c_dtype[z.dtype]).reshape(z.shape[:-1])
+
+def distance(u,v=zeros(2)):
+  # See http://en.wikipedia.org/wiki/Poincare_disk
+  return acosh(1+2*sqr_magnitudes(u-v)/((1-sqr_magnitudes(u)*(1-sqr_magnitudes(v)))))
+
+class Mobius(ndarray):
+  # Mobius group theory:
+  #   w = (az+b)/(cz+d)
+  # When does f(z) preserve the unit circle?
+  #   http://math.stackexchange.com/questions/34071/mobius-transforms-that-preserve-the-unit-disk
+  #   f(z) = r (z+a)/(1+a'z)
+  #   g(z) = s (z+b)/(1+b'z)
+  #   f(g(z)) = r (s(z+b)/(1+b'z)+a) / (1 + a's(z+b)/(1+b'z))
+  #           = r (s(z+b)+a(1+b'z)) / (1+b'z + a's(z+b))
+  #           = r ((s+ab')z + sb+a) / (1+sa'b + (b'+sa')z)
+  #           = rs ((1+s'ab')z + b+s'a) / (1+sa'b + (b+s'a)'z)
+  # Let t = (1+s'ab')/(1+sa'b), so that |t| = 1.  Let c = (b+s'a)/(1+s'ab').  We have
+  #   f(g(z)) = rst (z+c)/(1+c'z)
+
+  __array_priority__ = -1.
+
+  def __array_finalize__(self,*args):
+    '''View the 2x2 complex matrices m as Mobius transforms.
+    With no arguments, return a single identity transform.'''
+    assert iscomplexobj(self)
+    assert self.shape[-2:]==(2,2)
+
+  def __mul__(self,z):
+    if isinstance(z,Mobius):
+      if 0:
+        a = self.view(ndarray)[...,None]
+        b = z.reshape(z.shape[:-2]+(1,2,2))
+        print('A\n',self.view(ndarray))
+        print('B\n',b)
+        print('AB\n',multiply(a,b).sum(axis=-2))
+      return multiply(self.view(ndarray)[...,None],z.reshape(z.shape[:-2]+(1,2,2))).sum(axis=-2).view(Mobius)
+    else:
+      z = mergecomplex(z)
+      a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
+      return splitcomplex((a*z+b)/(c*z+d))
+
+  def inverse(self):
+    a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
+    i = empty(self.shape,self.dtype)
+    i[...,0,0] = d
+    i[...,0,1] = -b
+    i[...,1,0] = -c
+    i[...,1,1] = a
+    return (i/(a*d-b*c)[...,None,None]).view(Mobius)
+
+  def normalized(self):
+    a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
+    return self/sqrt(a*d-b*c)[...,None,None]
+
+  @staticmethod
+  def identity(dtype=complex128):
+    return eye(2,dtype=dtype).view(Mobius)
+
+  @staticmethod
+  def from_angle(t):
+    t = asarray(t)
+    m = zeros(t.shape+(2,2,2),t.dtype)
+    m[...,0,0,:] = polar(t)
+    m[...,1,1,0] = 1
+    return mergecomplex(m).view(Mobius)
+
+  @staticmethod
+  def translation(u):
+    "Walk the origin distance |u| in direction u/|u|"
+    d,u = magnitudes_and_normalized(u)
+    # Build rotations by u and conj(u)
+    u = mergecomplex(u)
+    # Here is how far the origin will go in the Poincare disk:
+    #   distance(v,0) = d
+    #   acosh(1+2v'v/(1-v'v)) = d
+    #   1+2v'v/(1-v'v) = cosh(d)
+    #   v'v/(1-v'v) = (cosh(d)-1)/2 = b
+    #   v'v = b/(1+b)
+    b = (cosh(d)-1)/2
+    vv = b/(1+b)
+    v = sqrt(vv)
+    # If u is real, our Mobius transform will look like
+    #   f(z) = r (z+a)/(1+a'z)
+    #   f(1) = r (1+a)/(1+a') = 1
+    #   v = f(0) = r a
+    #   a = v
+    #   r = 1
+    #   f(z) = (z+v)/(vz+1)
+    # If u is not real, we pre and post rotate:
+    #   f(z) = u(u'z+v)/(u'vz+1) = (z+uv)/(u'vz+1)
+    # Assemble transform
+    m = empty(d.shape+(2,2),dtype=u.dtype)
+    m[...,0,0] = 1
+    m[...,0,1] = u*v
+    m[...,1,0] = conj(u)*v
+    m[...,1,1] = 1
+    return m.view(Mobius)
+
+  def __str__(self):
+    return str(self.view(ndarray))
+
+  def __repr__(self):
+    return repr(self.view(ndarray))
+
+  @staticmethod
+  def empty(shape,dtype=complex128):
+    if not isinstance(shape,tuple):
+      shape = shape,
+    return empty(shape+(2,2),dtype).view(Mobius)
+
+  @staticmethod
+  def concat(*args):
+    return concatenate([a.view(ndarray) for a in args]).view(Mobius)
+
+  @staticmethod
+  def close(x,y=None):
+    y = Mobius.identity() if y is None else y.normalized()
+    return allclose(x.normalized(),y)
+
+def test_mobius():
+  random.seed(821)
+  # Rotations
+  v = (.2,.2)
+  theta = random.randn()
+  r = Mobius.from_angle(theta)
+  assert allclose(r*v,Rotation.from_angle(theta)*v)
+  # Translations
+  u = random.randn(2)
+  t = Mobius.translation(u)
+  tf = Mobius.translation(-u)
+  assert allclose(distance(t*zeros(2)),magnitude(u))
+  assert allclose(angle_between(t*zeros(2),u),0)
+  # Inverses
+  m = Mobius.translation(u)*Mobius.translation(random.randn(2))
+  assert Mobius.close(m*m.inverse())
+  assert Mobius.close(m.inverse()*m)
+  # Identities
+  f = Mobius.from_angle(pi)
+  assert Mobius.close(t*tf)
+  assert Mobius.close(t*f,f*tf)
+  assert Mobius.close(t*t,Mobius.translation(2*u))
+
+def equilateral_length_from_angle(t):
+  # The hyperbolic law of cosines for angle t, side s is
+  #   cos t = -cos^2 t + sin^2 t cosh a
+  #   a = acosh (cos(t)*(1+cos(t))/sin(t)^2)
+  c,s = cos(t),sin(t)
+  return acosh(c*(1+c)/(s*s))
+
+def lattice(depth):
+  '''Compute lattice points and transforms of the standard 7-valent triangulation
+  of the Poincare disk model of the hyperbolic plane.'''
+  a = 2*pi/7
+  advance = Mobius.translation((equilateral_length_from_angle(a),0))*Mobius.from_angle(pi)
+  rotate = Mobius.from_angle(a*arange(7))
+  levels = [rotate]
+  for d in xrange(depth):
+    next = ((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2)
+    levels.append(((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2))
+  trans = Mobius.concat(*levels)
+  # Prune duplicates
+  compact = ParticleTree(trans*zeros(2),1).remove_duplicates(1e-7)
+  trans = trans[unique(compact,return_index=1)[1]]
+  print('count = %d'%len(trans))
+  return trans
+
+def lattice_edges(trans,n=1):
+  a = 2*pi/7
+  tree = ParticleTree(trans*zeros(2),1) 
+  step = equilateral_length_from_angle(a)
+  walks = Mobius.translation(linspace(1e-50,step,n)[:,None]*polar(a*arange(7))[:,None])
+  edges = []
+  paths = [] 
+  for i,m in enumerate(trans):
+    for walk in walks:
+      p = m*walk[-1]*zeros(2)
+      cp,j = tree.closest_point(p,1e-7)
+      if all(isfinite(cp)) and distance(p,cp)<.1:
+        edges.append((i,j))
+        paths.append(m*walk*zeros(2))
+  return asarray(edges),tuple(paths)
+
+def plot():
+  import pylab
+  trans = lattice(3)
+  # Draw vertices
+  points = trans*zeros(2)
+  print('points %s'%(points.shape,))
+  pylab.plot(points[:,0],points[:,1],'o')
+  # Draw edges
+  edges,paths = lattice_edges(trans,n=20)
+  for path in paths:
+    pylab.plot(path[:,0],path[:,1],'g')
+  # Show
+  pylab.axes().set_aspect('equal')
+  pylab.show()
+
+if __name__=='__main__':
+  test_mobius()
+  plot()
