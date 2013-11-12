@@ -5,3 +5,8 @@
 mitsuba.*.log
 gen
 gen-*
+config.py
+.sconsign.dblite
+.sconf_temp
+config.log
+build

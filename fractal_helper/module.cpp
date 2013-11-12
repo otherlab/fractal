@@ -370,7 +370,7 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
   return curves.y.flat;
 }
 
-GEODE_PYTHON_MODULE(other_fractal) {
+GEODE_PYTHON_MODULE(fractal_helper) {
   GEODE_FUNCTION(boundary_edges_to_faces)
   GEODE_FUNCTION(iterate_L_system)
   GEODE_FUNCTION(branching_mesh)

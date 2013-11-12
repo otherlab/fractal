@@ -9,8 +9,8 @@ from gui import *
 from gui.show_tree import *
 from geode.value import parser
 from geode.openmesh import *
-from fractal import *
-from fractal import mitsuba
+from fractal_helper import *
+import mitsuba
 
 # Examples:
 #

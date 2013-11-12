@@ -6,8 +6,8 @@ import subprocess
 import os.path
 from geode import *
 from geode.value import parser
-from other.fractal.mitsuba import *
-from other.fractal import *
+from mitsuba import *
+from fractal_helper import *
 
 # Fine front:
 # ./dragon.py --type dragon --level 17 --smooth 5 --corner-shift 0.05 --size 150 --thickness 0.025 --closed 0 --closed-base 1 --z-scale 0.5 --sharp-corners 0 --colorize 1 --instance 1 --border-crease 1 --ground 1 --settle-step 0.01 --mitsuba-dir gen-fine --origin=-49.412825379531753,208.92850880962186,78.324132111435546 --target 1.8198107879612146,-9.5738105894434717,53.519032449873805 --rotation 0,-0.9999999984957032,5.4850649339629963e-05,0 --border-layers 8
