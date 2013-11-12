@@ -3,7 +3,7 @@
 from __future__ import division
 from geode import *
 from geode.value import parser
-from other.gui import *
+from gui import *
 from OpenGL import GL
 import scipy.integrate
 import sys
