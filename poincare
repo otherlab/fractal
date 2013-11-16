@@ -17,6 +17,7 @@ depth = props.add('depth',3)
 resolution = props.add('resolution',20)
 tolerance = props.add('tolerance',1e-2)
 separation = props.add('separation',.8)
+levels = props.add('levels',1)
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -32,8 +33,9 @@ def mergecomplex(z):
   return z.view(r2c_dtype[z.dtype]).reshape(z.shape[:-1])
 
 def distance(u,v=zeros(2)):
-  # See http://en.wikipedia.org/wiki/Poincare_disk
-  return acosh(1+2*sqr_magnitudes(u-v)/((1-sqr_magnitudes(u)*(1-sqr_magnitudes(v)))))
+  '''Measure distance in the Poincare disk model of the hyperbolic plane.
+  See http://en.wikipedia.org/wiki/Poincare_disk for details.'''
+  return acosh(1+2*sqr_magnitudes(u-v)/((1-sqr_magnitudes(u))*(1-sqr_magnitudes(v))))
 
 class Mobius(ndarray):
   # Mobius group theory:
@@ -59,12 +61,6 @@ class Mobius(ndarray):
 
   def __mul__(self,z):
     if isinstance(z,Mobius):
-      if 0:
-        a = self.view(ndarray)[...,None]
-        b = z.reshape(z.shape[:-2]+(1,2,2))
-        print('A\n',self.view(ndarray))
-        print('B\n',b)
-        print('AB\n',multiply(a,b).sum(axis=-2))
       return multiply(self.view(ndarray)[...,None],z.reshape(z.shape[:-2]+(1,2,2))).sum(axis=-2).view(Mobius)
     else:
       z = mergecomplex(z)
@@ -98,6 +94,7 @@ class Mobius(ndarray):
 
   @staticmethod
   def translation(u):
+    assert not iscomplexobj(u)
     "Walk the origin distance |u| in direction u/|u|"
     d,u = magnitudes_and_normalized(u)
     # Build rotations by u and conj(u)
@@ -161,6 +158,8 @@ def test_mobius():
   t = Mobius.translation(u)
   tf = Mobius.translation(-u)
   assert allclose(distance(t*zeros(2)),magnitude(u))
+  assert allclose(distance(t*zeros(2),zeros(2)),magnitude(u))
+  assert allclose(distance(zeros(2),t*zeros(2)),magnitude(u))
   assert allclose(angle_between(t*zeros(2),u),0)
   # Inverses
   m = Mobius.translation(u)*Mobius.translation(random.randn(2))
@@ -200,26 +199,30 @@ def lattice():
 @cache
 def lattice_edges():
   trans = lattice()
-  n = resolution()
   a = 2*pi/7
   tree = ParticleTree(trans*zeros(2),1)
   step = equilateral_length_from_angle(a)
-  walks = Mobius.translation(linspace(1e-50,step,n)[:,None]*polar(a*arange(7))[:,None])
+  walks = Mobius.translation(step*polar(a*arange(7)))
   edges = []
-  paths = []
   for i,m in enumerate(trans):
     for walk in walks:
-      p = m*walk[-1]*zeros(2)
+      p = m*walk*zeros(2)
       cp,j = tree.closest_point(p,1e-7)
       if all(isfinite(cp)) and distance(p,cp)<.1:
         edges.append((i,j))
-        paths.append(m*walk*zeros(2))
-  return asarray(edges,dtype=int32),tuple(paths)
+  return asarray(edges,dtype=int32)
+
+def interpolate(x,y,t):
+  m = Mobius.translation(distance(x)[...,None]*normalized(x))
+  y = m.inverse()*y
+  dy = distance(y)[...,None]*normalized(y)
+  t = asarray(t)[...,None]
+  return m*(Mobius.translation(t*dy)*zeros(2))
 
 @cache
 def lattice_mesh():
   X = lattice()*zeros(2)
-  edges,_ = lattice_edges()
+  edges = lattice_edges()
   near = defaultdict(lambda:set())
   for x,y in edges:
     near[x].add(y)
@@ -234,15 +237,32 @@ def lattice_mesh():
         tris.add((a,b,c))
   return TriangleSoup(sorted(tris))
 
+def subdivided():
+  mesh = lattice_mesh()
+  X = lattice()*zeros(2)
+  if levels()==1:
+    return mesh,X
+  elif levels()==2:
+    subdiv = TriangleSubdivision(mesh)
+    i,j = mesh.segment_soup().elements.T
+    X = concatenate([X,interpolate(X[i],X[j],1/2)])
+    return subdiv.fine_mesh,X
+  else:
+    raise NotImplementedError('only subdivision levels 1,2,3 are allowed, got %d'%levels())
+fine_lattice_mesh = cache(lambda:subdivided()[0])
+fine_points = cache(lambda:subdivided()[1])
+
 @cache
 def flopsolve():
-  X0 = lattice()*zeros(2)
+  X0 = fine_points()
   n = len(X0)
-  edges,_ = lattice_edges()
+  edges = fine_lattice_mesh().segment_soup().elements
+  rest = distance(X0[edges[:,0]],X0[edges[:,1]])
+  rest /= rest.mean()
   def lengths(X):
     return magnitudes(X[edges[:,1]]-X[edges[:,0]])
 
-  # Scale so that the average edge length is 1
+  # Scale so that the average edge length is closer to 1
   X0 /= lengths(X0).mean()
   # Move to 3D
   X0 = hstack([X0,zeros(n)[:,None]])
@@ -253,17 +273,21 @@ def flopsolve():
   # Define problem
   close = separation()
   stiff = 10
-  collisions = SimpleCollisions(lattice_mesh(),close,True)
+  collisions = SimpleCollisions(fine_lattice_mesh(),close,True)
   def energy(X):
     X = X.reshape(-1,3)
-    L = sqr_magnitude(lengths(X)-1)/2
-    C = stiff*collisions.energy(X)
+    L = sqr_magnitude(lengths(X)-rest)/2
+    C = stiff*collisions.energy(X) if stiff else 0
     print ('energies: L = %g, C = %g'%(L,C))
     return L+C
   def gradient(X):
     X = X.reshape(-1,3)
-    G = unit_spring_energy_gradient(edges,X)+stiff*collisions.gradient(X)
-    return G.ravel()
+    L = unit_spring_energy_gradient(edges,rest,X)
+    if stiff:
+      C = stiff*collisions.gradient(X)
+      return (L+C).ravel()
+    else:
+      return L.ravel()
 
   # Test
   dX = 1e-7*random.randn(n,3)
@@ -290,11 +314,11 @@ def flop():
   import gui
   app = gui.QEApp(sys.argv,True)
   main = gui.MainWindow(props)
-  main.view.add_scene('mesh',gui.MeshScene(props,lattice_mesh,flopsolve,(.2,.2,1),(0,1,0)))
+  main.view.add_scene('mesh',gui.MeshScene(props,fine_lattice_mesh,flopsolve,(.2,.2,1),(0,1,0)))
   def save_mesh():
     tm = TriMesh()
     tm.add_vertices(flopsolve())
-    tm.add_faces(lattice_mesh().elements)
+    tm.add_faces(fine_lattice_mesh().elements)
     tm.write('poincare.stl')
   main.add_menu_item('File','Save',save_mesh,'')
   main.init()
@@ -302,13 +326,14 @@ def flop():
 
 def plot():
   import pylab
-  trans = lattice()
   # Draw vertices
-  points = trans*zeros(2)
+  points = fine_points()
   print('points %s'%(points.shape,))
   pylab.plot(points[:,0],points[:,1],'o')
   # Draw edges
-  edges,paths = lattice_edges()
+  edges = fine_lattice_mesh().segment_soup().elements
+  t = linspace(0,1,num=resolution())
+  paths = interpolate(points[edges[:,0]].reshape(-1,1,2),points[edges[:,1]].reshape(-1,1,2),t)
   for path in paths:
     pylab.plot(path[:,0],path[:,1],'g')
   # Show

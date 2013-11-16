@@ -374,12 +374,15 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
   return curves.y.flat;
 }
 
-static Array<TV3> unit_spring_energy_gradient(RawArray<const Vector<int,2>> edges, RawArray<const TV3> X) {
+static Array<TV3> unit_spring_energy_gradient(RawArray<const Vector<int,2>> edges, RawArray<const T> rest,
+                                              RawArray<const TV3> X) {
+  GEODE_ASSERT(edges.size()==rest.size());
   Array<TV3> gradient(X.size());
-  for (const auto edge : edges) {
+  for (const int s : range(edges.size())) {
+    const auto edge = edges[s];
     TV3 dX = X[edge.y]-X[edge.x];
     const T len = normalize(dX);
-    const TV3 dE = (len-1)*dX;
+    const TV3 dE = (len-rest[s])*dX;
     gradient[edge.x] -= dE;
     gradient[edge.y] += dE;
   }
