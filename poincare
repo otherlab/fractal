@@ -3,9 +3,20 @@
 from __future__ import division,print_function,unicode_literals
 from geode.value import parser
 from geode import *
+from fractal_helper import *
+from collections import defaultdict
+import sys
+
+# Depth 4:
+#   ./poincare --mode flop --tolerance 1e-3 --depth 4 --separation .05
 
 # Properties
 props = PropManager()
+mode = props.add('mode','disk').set_allowed('disk flop test'.split())
+depth = props.add('depth',3)
+resolution = props.add('resolution',20)
+tolerance = props.add('tolerance',1e-2)
+separation = props.add('separation',.8)
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -168,14 +179,15 @@ def equilateral_length_from_angle(t):
   c,s = cos(t),sin(t)
   return acosh(c*(1+c)/(s*s))
 
-def lattice(depth):
+@cache
+def lattice():
   '''Compute lattice points and transforms of the standard 7-valent triangulation
   of the Poincare disk model of the hyperbolic plane.'''
   a = 2*pi/7
   advance = Mobius.translation((equilateral_length_from_angle(a),0))*Mobius.from_angle(pi)
   rotate = Mobius.from_angle(a*arange(7))
   levels = [rotate]
-  for d in xrange(depth):
+  for d in xrange(depth()):
     next = ((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2)
     levels.append(((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2))
   trans = Mobius.concat(*levels)
@@ -185,13 +197,16 @@ def lattice(depth):
   print('count = %d'%len(trans))
   return trans
 
-def lattice_edges(trans,n=1):
+@cache
+def lattice_edges():
+  trans = lattice()
+  n = resolution()
   a = 2*pi/7
-  tree = ParticleTree(trans*zeros(2),1) 
+  tree = ParticleTree(trans*zeros(2),1)
   step = equilateral_length_from_angle(a)
   walks = Mobius.translation(linspace(1e-50,step,n)[:,None]*polar(a*arange(7))[:,None])
   edges = []
-  paths = [] 
+  paths = []
   for i,m in enumerate(trans):
     for walk in walks:
       p = m*walk[-1]*zeros(2)
@@ -199,17 +214,101 @@ def lattice_edges(trans,n=1):
       if all(isfinite(cp)) and distance(p,cp)<.1:
         edges.append((i,j))
         paths.append(m*walk*zeros(2))
-  return asarray(edges),tuple(paths)
+  return asarray(edges,dtype=int32),tuple(paths)
+
+@cache
+def lattice_mesh():
+  X = lattice()*zeros(2)
+  edges,_ = lattice_edges()
+  near = defaultdict(lambda:set())
+  for x,y in edges:
+    near[x].add(y)
+    near[y].add(x)
+  tris = set()
+  for x,y in edges:
+    for z in near[x]:
+      if z in near[y]:
+        a,b,c = sorted((x,y,z))
+        if cross(X[b]-X[a],X[c]-X[a])<0:
+          b,c = c,b
+        tris.add((a,b,c))
+  return TriangleSoup(sorted(tris))
+
+@cache
+def flopsolve():
+  X0 = lattice()*zeros(2)
+  n = len(X0)
+  edges,_ = lattice_edges()
+  def lengths(X):
+    return magnitudes(X[edges[:,1]]-X[edges[:,0]])
+
+  # Scale so that the average edge length is 1
+  X0 /= lengths(X0).mean()
+  # Move to 3D
+  X0 = hstack([X0,zeros(n)[:,None]])
+  # Apply some noise so that everything doesn't start in the plane
+  random.seed(8231110)
+  X0 += .1*random.randn(n,3)
+
+  # Define problem
+  close = separation()
+  stiff = 10
+  collisions = SimpleCollisions(lattice_mesh(),close,True)
+  def energy(X):
+    X = X.reshape(-1,3)
+    L = sqr_magnitude(lengths(X)-1)/2
+    C = stiff*collisions.energy(X)
+    print ('energies: L = %g, C = %g'%(L,C))
+    return L+C
+  def gradient(X):
+    X = X.reshape(-1,3)
+    G = unit_spring_energy_gradient(edges,X)+stiff*collisions.gradient(X)
+    return G.ravel()
+
+  # Test
+  dX = 1e-7*random.randn(n,3)
+  X = random.randn(n,3)
+  numerical = energy(X+dX)-energy(X-dX)
+  analytic = 2*dot(gradient(X),dX.ravel())
+  error = relative_error(numerical,analytic)
+  print('numerical = %g, analytic = %g, error = %g'%(numerical,analytic,error))
+  assert error<1e-5
+
+  # Solve
+  import scipy.optimize
+  result = scipy.optimize.minimize(energy,X0.ravel(),jac=gradient,tol=tolerance())
+  X = result.x.reshape(-1,3)
+  print('energy = %g'%energy(X))
+  L = lengths(X)
+  lo,hi = L.min(),L.max()
+  print('length range = %g %g (width %g)'%(lo,hi,hi-lo))
+  print('closest = %g'%collisions.closest(X))
+  print('collisions = %d'%collisions.collisions(X))
+  return X
+
+def flop():
+  import gui
+  app = gui.QEApp(sys.argv,True)
+  main = gui.MainWindow(props)
+  main.view.add_scene('mesh',gui.MeshScene(props,lattice_mesh,flopsolve,(.2,.2,1),(0,1,0)))
+  def save_mesh():
+    tm = TriMesh()
+    tm.add_vertices(flopsolve())
+    tm.add_faces(lattice_mesh().elements)
+    tm.write('poincare.stl')
+  main.add_menu_item('File','Save',save_mesh,'')
+  main.init()
+  app.run()
 
 def plot():
   import pylab
-  trans = lattice(3)
+  trans = lattice()
   # Draw vertices
   points = trans*zeros(2)
   print('points %s'%(points.shape,))
   pylab.plot(points[:,0],points[:,1],'o')
   # Draw edges
-  edges,paths = lattice_edges(trans,n=20)
+  edges,paths = lattice_edges()
   for path in paths:
     pylab.plot(path[:,0],path[:,1],'g')
   # Show
@@ -218,4 +317,9 @@ def plot():
 
 if __name__=='__main__':
   test_mobius()
-  plot()
+  if mode()=='disk':
+    plot()
+  elif mode()=='flop':
+    flop()
+  elif mode()!='test':
+    raise NotImplementedError("unknown mode '%s'"%mode())

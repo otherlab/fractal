@@ -2,12 +2,17 @@
 // Module fractal
 //#####################################################################
 #include <geode/array/NdArray.h>
-#include <geode/python/module.h>
-#include <geode/python/wrap.h>
+#include <geode/array/IndirectArray.h>
+#include <geode/geometry/Ray.h>
+#include <geode/geometry/Triangle3d.h>
 #include <geode/mesh/SegmentSoup.h>
 #include <geode/mesh/TriangleSoup.h>
 #include <geode/openmesh/TriMesh.h>
+#include <geode/python/Class.h>
+#include <geode/python/module.h>
 #include <geode/python/stl.h>
+#include <geode/python/wrap.h>
+#include <geode/solver/powell.h>
 #include <geode/structure/Hashtable.h>
 #include <geode/structure/Tuple.h>
 #include <geode/structure/UnionFind.h>
@@ -17,7 +22,6 @@
 #include <geode/vector/Frame.h>
 #include <geode/vector/Matrix4x4.h>
 #include <geode/vector/normalize.h>
-#include <geode/solver/powell.h>
 #include <vector>
 using namespace geode;
 
@@ -370,6 +374,134 @@ static Array<const int> boundary_curve_at_height(const TriangleSoup& mesh, RawAr
   return curves.y.flat;
 }
 
+static Array<TV3> unit_spring_energy_gradient(RawArray<const Vector<int,2>> edges, RawArray<const TV3> X) {
+  Array<TV3> gradient(X.size());
+  for (const auto edge : edges) {
+    TV3 dX = X[edge.y]-X[edge.x];
+    const T len = normalize(dX);
+    const TV3 dE = (len-1)*dX;
+    gradient[edge.x] -= dE;
+    gradient[edge.y] += dE;
+  }
+  return gradient;
+}
+
+namespace {
+struct SimpleCollisions : public Object {
+  GEODE_DECLARE_TYPE(GEODE_NO_EXPORT)
+
+  const Ref<const TriangleSoup> tris;
+  const T close;
+  const bool faces;
+
+private:
+  SimpleCollisions(const TriangleSoup& tris, const T close, const bool faces)
+    : tris(ref(tris))
+    , close(close)
+    , faces(faces) {}
+public:
+
+  T distance_energy(const T d) const {
+    return d<close ? .5*sqr(d-close) : 0;
+  }
+
+  T distance_gradient(const T d) const {
+    return d<close ? d-close : 0;
+  }
+
+  typedef Vector<int,2> IV2;
+  typedef Vector<int,3> IV3;
+  typedef Segment<TV3> Seg;
+  typedef Triangle<TV3> Tri;
+
+  template<class EE,class PF> void traverse(RawArray<const TV3> X, const EE& edge_edge, const PF& point_face) const {
+    GEODE_ASSERT(X.size()==tris->nodes());
+    const auto edges = tris->segment_soup()->elements.raw();
+    for (int i=0;i<edges.size();i++)
+      for (int j=0;j<i;j++) {
+        const auto ei = edges[i],
+                   ej = edges[j];
+        if (!(ei.contains(ej.x) || ei.contains(ej.y)))
+          edge_edge(ei,ej,simplex(X[ei.x],X[ei.y]),simplex(X[ej.x],X[ej.y]));
+      }
+    if (faces)
+      for (const auto tri : tris->elements)
+        for (const int p : range(tris->nodes()))
+          if (!tri.contains(p)) {
+            const auto T = Tri(X[tri.x],X[tri.y],X[tri.z]);
+            point_face(p,tri,X[p],T);
+          }
+  }
+
+  T closest(RawArray<const TV3> X) const {
+    T closest = inf;
+    traverse(X,
+      [&](const IV2 ei, const IV2 ej, const Seg si, const Seg sj) {
+        closest = min(closest,segment_segment_distance(si,sj));
+      },
+      [&](const int p, const IV3 tri, const TV3 Xp, const Tri T) {
+        const auto I = T.closest_point(Xp);
+        closest = min(closest,magnitude(Xp-I.x));
+      });
+    return closest;
+  }
+
+  T energy(RawArray<const TV3> X) const {
+    T sum = 0;
+    traverse(X,
+      [&](const IV2 ei, const IV2 ej, const Seg si, const Seg sj) {
+        sum += distance_energy(segment_segment_distance(si,sj));
+      },
+      [&](const int p, const IV3 tri, const TV3 Xp, const Tri T) {
+        const auto I = T.closest_point(Xp);
+        sum += distance_energy(magnitude(Xp-I.x));
+      });
+    return sum;
+  }
+
+  Array<TV3> gradient(RawArray<const TV3> X) const {
+    Array<TV3> grad(X.size());
+    traverse(X,
+      [&](const IV2 ei, const IV2 ej, const Seg si, const Seg sj) {
+        const auto I = segment_segment_distance_and_normal(simplex(X[ei.x],X[ei.y]),simplex(X[ej.x],X[ej.y]));
+        const T d = distance_gradient(I.x);
+        grad[ei.x] -= d*(1-I.z.x)*I.y;
+        grad[ei.y] -= d*   I.z.x *I.y;
+        grad[ej.x] += d*(1-I.z.y)*I.y;
+        grad[ej.y] += d*   I.z.y *I.y;
+      },
+      [&](const int p, const IV3 tri, const TV3 Xp, const Tri Xtri) {
+        const auto I = Xtri.closest_point(Xp);
+        auto N = Xp-I.x;
+        const T d = distance_gradient(normalize(N));
+        grad[p] += d*N;
+        grad[tri.x] -= d*I.y.x*N;
+        grad[tri.y] -= d*I.y.y*N;
+        grad[tri.z] -= d*I.y.z*N;
+      });
+    return grad;
+  }
+
+  int collisions(RawArray<const TV3> X) const {
+    GEODE_ASSERT(X.size()==tris->nodes());
+    const auto edges = tris->segment_soup()->elements.raw();
+    int count = 0;
+    for (const auto tri : tris->elements) {
+      const Tri t(X[tri.x],X[tri.y],X[tri.z]);
+      for (const auto edge : edges)
+        if (!(tri.contains(edge.x) || tri.contains(edge.y))) {
+          const Seg s(X[edge.x],X[edge.y]);
+          Ray<TV3> ray(s);
+          count += t.lazy_intersection(ray);
+        }
+    }
+    return count;
+  }
+};
+
+GEODE_DEFINE_TYPE(SimpleCollisions)
+}
+
 GEODE_PYTHON_MODULE(fractal_helper) {
   GEODE_FUNCTION(boundary_edges_to_faces)
   GEODE_FUNCTION(iterate_L_system)
@@ -380,4 +512,14 @@ GEODE_PYTHON_MODULE(fractal_helper) {
   GEODE_FUNCTION(torus_mesh)
   GEODE_FUNCTION(make_manifold)
   GEODE_FUNCTION(boundary_curve_at_height)
+  GEODE_FUNCTION(unit_spring_energy_gradient)
+
+  typedef SimpleCollisions Self;
+  Class<Self>("SimpleCollisions")
+    .GEODE_INIT(const TriangleSoup&,const T,bool)
+    .GEODE_METHOD(closest)
+    .GEODE_METHOD(energy)
+    .GEODE_METHOD(gradient)
+    .GEODE_METHOD(collisions)
+    ;
 }
