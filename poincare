@@ -18,6 +18,7 @@ resolution = props.add('resolution',20)
 tolerance = props.add('tolerance',1e-2)
 separation = props.add('separation',.8)
 levels = props.add('levels',1)
+degree = props.add('degree',7)
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -182,9 +183,9 @@ def equilateral_length_from_angle(t):
 def lattice():
   '''Compute lattice points and transforms of the standard 7-valent triangulation
   of the Poincare disk model of the hyperbolic plane.'''
-  a = 2*pi/7
+  a = 2*pi/degree()
   advance = Mobius.translation((equilateral_length_from_angle(a),0))*Mobius.from_angle(pi)
-  rotate = Mobius.from_angle(a*arange(7))
+  rotate = Mobius.from_angle(a*arange(degree()))
   levels = [rotate]
   for d in xrange(depth()):
     next = ((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2)
@@ -199,10 +200,10 @@ def lattice():
 @cache
 def lattice_edges():
   trans = lattice()
-  a = 2*pi/7
+  a = 2*pi/degree()
   tree = ParticleTree(trans*zeros(2),1)
   step = equilateral_length_from_angle(a)
-  walks = Mobius.translation(step*polar(a*arange(7)))
+  walks = Mobius.translation(step*polar(a*arange(degree())))
   edges = []
   for i,m in enumerate(trans):
     for walk in walks:
@@ -332,6 +333,7 @@ def plot():
   pylab.plot(points[:,0],points[:,1],'o')
   # Draw edges
   edges = fine_lattice_mesh().segment_soup().elements
+  print('triangles = %d'%len(fine_lattice_mesh().elements))
   t = linspace(0,1,num=resolution())
   paths = interpolate(points[edges[:,0]].reshape(-1,1,2),points[edges[:,1]].reshape(-1,1,2),t)
   for path in paths:
