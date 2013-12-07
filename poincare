@@ -19,6 +19,7 @@ tolerance = props.add('tolerance',1e-2)
 separation = props.add('separation',.8)
 levels = props.add('levels',1)
 degree = props.add('degree',7)
+autosave = props.add('autosave','')
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -243,11 +244,13 @@ def subdivided():
   X = lattice()*zeros(2)
   if levels()==1:
     return mesh,X
-  elif levels()==2:
-    subdiv = TriangleSubdivision(mesh)
-    i,j = mesh.segment_soup().elements.T
-    X = concatenate([X,interpolate(X[i],X[j],1/2)])
-    return subdiv.fine_mesh,X
+  elif levels()==2 or levels()==4:
+    for i in xrange(int(rint(log2(levels())))):
+      subdiv = TriangleSubdivision(mesh)
+      i,j = mesh.segment_soup().elements.T
+      X = concatenate([X,interpolate(X[i],X[j],1/2)])
+      mesh = subdiv.fine_mesh
+    return mesh,X
   else:
     raise NotImplementedError('only subdivision levels 1,2,3 are allowed, got %d'%levels())
 fine_lattice_mesh = cache(lambda:subdivided()[0])
@@ -312,18 +315,34 @@ def flopsolve():
   return X
 
 def flop():
-  import gui
-  app = gui.QEApp(sys.argv,True)
-  main = gui.MainWindow(props)
-  main.view.add_scene('mesh',gui.MeshScene(props,fine_lattice_mesh,flopsolve,(.2,.2,1),(0,1,0)))
-  def save_mesh():
+  def save_mesh(name='poincare.obj'):
     tm = TriMesh()
     tm.add_vertices(flopsolve())
     tm.add_faces(fine_lattice_mesh().elements)
-    tm.write('poincare.stl')
-  main.add_menu_item('File','Save',save_mesh,'')
-  main.init()
-  app.run()
+    tm.write(name)
+  if autosave():
+    save_mesh(autosave())
+  try:
+    import gui
+    app = gui.QEApp(sys.argv,True)
+    main = gui.MainWindow(props)
+    main.view.add_scene('mesh',gui.MeshScene(props,fine_lattice_mesh,flopsolve,(.2,.2,1),(0,1,0)))
+    main.add_menu_item('File','Save',save_mesh,'')
+    main.init()
+    app.run()
+  except ImportError:
+    print('Warning: other/gui not found, falling back to matplotlib')
+    X = flopsolve()
+    tris = fine_lattice_mesh().elements
+    # Rescale since matplotlib is broken
+    X -= X.min(axis=0)
+    X /= X.max()
+    # Plot
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    import matplotlib.pyplot as plt
+    Axes3D(plt.figure()).add_collection3d(Poly3DCollection(X[tris]))
+    plt.show()
 
 def plot():
   import pylab
