@@ -3,7 +3,10 @@
 //#####################################################################
 #include <geode/array/NdArray.h>
 #include <geode/array/IndirectArray.h>
+#include <geode/geometry/ParticleTree.h>
 #include <geode/geometry/Ray.h>
+#include <geode/geometry/SimplexTree.h>
+#include <geode/geometry/traverse.h>
 #include <geode/geometry/Triangle3d.h>
 #include <geode/mesh/SegmentSoup.h>
 #include <geode/mesh/TriangleSoup.h>
@@ -393,15 +396,21 @@ namespace {
 struct SimpleCollisions : public Object {
   GEODE_DECLARE_TYPE(GEODE_NO_EXPORT)
 
-  const Ref<const TriangleSoup> tris;
+  const Array<TV3> X;
+  const Ref<ParticleTree<TV3>> points;
+  const Ref<SimplexTree<TV3,1>> edges;
+  const Ref<SimplexTree<TV3,2>> faces;
   const T close;
-  const bool faces;
+  const bool include_faces;
 
 private:
-  SimpleCollisions(const TriangleSoup& tris, const T close, const bool faces)
-    : tris(ref(tris))
+  SimpleCollisions(const TriangleSoup& mesh, RawArray<const TV3> X0, const T close, const bool include_faces)
+    : X(X0.copy())
+    , points(new_<ParticleTree<TV3>>(X,1))
+    , edges(new_<SimplexTree<TV3,1>>(mesh.segment_soup(),X,1))
+    , faces(new_<SimplexTree<TV3,2>>(mesh,X,1))
     , close(close)
-    , faces(faces) {}
+    , include_faces(include_faces) {}
 public:
 
   T distance_energy(const T d) const {
@@ -417,23 +426,63 @@ public:
   typedef Segment<TV3> Seg;
   typedef Triangle<TV3> Tri;
 
-  template<class EE,class PF> void traverse(RawArray<const TV3> X, const EE& edge_edge, const PF& point_face) const {
-    GEODE_ASSERT(X.size()==tris->nodes());
-    const auto edges = tris->segment_soup()->elements.raw();
-    for (int i=0;i<edges.size();i++)
-      for (int j=0;j<i;j++) {
-        const auto ei = edges[i],
-                   ej = edges[j];
-        if (!(ei.contains(ej.x) || ei.contains(ej.y)))
-          edge_edge(ei,ej,simplex(X[ei.x],X[ei.y]),simplex(X[ej.x],X[ej.y]));
+  template<class Visit> struct EEVisitor {
+    const SimplexTree<TV3,1>& edges;
+    RawArray<const Vector<int,2>> elements;
+    RawArray<const TV3> X;
+    const Visit& visit;
+
+    EEVisitor(const SimplexTree<TV3,1>& edges, RawArray<const TV3> X, const Visit& visit)
+      : edges(edges), elements(edges.mesh->elements), X(X), visit(visit) {}
+
+    template<class... A> bool cull(A...) const {
+      return false;
+    }
+
+    void leaf(const int n0) const {} // Edges do not intersect themselves
+
+    void leaf(const int n0, const int n1) const {
+      const auto ei = elements[edges.prims(n0)[0]],
+                 ej = elements[edges.prims(n1)[0]];
+      if (!(ei.contains(ej.x) || ei.contains(ej.y)))
+        visit(ei,ej,simplex(X[ei.x],X[ei.y]),simplex(X[ej.x],X[ej.y]));
+    }
+  };
+
+  template<class Visit> struct PFVisitor {
+    const ParticleTree<TV3>& points;
+    const SimplexTree<TV3,2>& faces;
+    RawArray<const Vector<int,3>> elements;
+    RawArray<const TV3> X;
+    const Visit& visit;
+
+    PFVisitor(const ParticleTree<TV3>& points, const SimplexTree<TV3,2>& faces, RawArray<const TV3> X, const Visit& visit)
+      : points(points), faces(faces), elements(faces.mesh->elements), X(X), visit(visit) {}
+
+    bool cull(const int n0, const int n1) const {
+      return false;
+    }
+
+    void leaf(const int n0, const int n1) const {
+      const int p = points.prims(n0)[0]; 
+      const auto tri = elements[faces.prims(n1)[0]];
+      if (!tri.contains(p)) {
+        const auto T = Tri(X[tri.x],X[tri.y],X[tri.z]);
+        visit(p,tri,X[p],T);
       }
-    if (faces)
-      for (const auto tri : tris->elements)
-        for (const int p : range(tris->nodes()))
-          if (!tri.contains(p)) {
-            const auto T = Tri(X[tri.x],X[tri.y],X[tri.z]);
-            point_face(p,tri,X[p],T);
-          }
+    }
+  };
+
+  template<class EE,class PF> void traverse(RawArray<const TV3> X, const EE& edge_edge, const PF& point_face) const {
+    GEODE_ASSERT(X.size()==faces->mesh->nodes());
+    this->X.copy(X);
+    edges->update();
+    double_traverse(*edges,EEVisitor<EE>(edges,X,edge_edge),close);
+    if (include_faces) {
+      points->update();
+      faces->update();
+      double_traverse(*points,*faces,PFVisitor<PF>(points,faces,X,point_face),close);
+    }
   }
 
   T closest(RawArray<const TV3> X) const {
@@ -485,20 +534,41 @@ public:
     return grad;
   }
 
-  int collisions(RawArray<const TV3> X) const {
-    GEODE_ASSERT(X.size()==tris->nodes());
-    const auto edges = tris->segment_soup()->elements.raw();
-    int count = 0;
-    for (const auto tri : tris->elements) {
-      const Tri t(X[tri.x],X[tri.y],X[tri.z]);
-      for (const auto edge : edges)
-        if (!(tri.contains(edge.x) || tri.contains(edge.y))) {
-          const Seg s(X[edge.x],X[edge.y]);
-          Ray<TV3> ray(s);
-          count += t.lazy_intersection(ray);
-        }
+  struct CollisionVisitor : public boost::noncopyable {
+    const SimplexTree<TV3,1>& edges;
+    const SimplexTree<TV3,2>& faces;
+    RawArray<const Vector<int,2>> segs;
+    RawArray<const Vector<int,3>> tris;
+    RawArray<const TV3> X;
+    int count;
+
+    CollisionVisitor(const SimplexTree<TV3,1>& edges, const SimplexTree<TV3,2>& faces, RawArray<const TV3> X)
+      : edges(edges), faces(faces), segs(edges.mesh->elements), tris(faces.mesh->elements), X(X), count(0) {}
+
+    bool cull(const int n0, const int n1) const {
+      return false;
     }
-    return count;
+
+    void leaf(const int n0, const int n1) {
+      const auto seg = segs[edges.prims(n0)[0]];
+      const auto tri = tris[faces.prims(n1)[0]];
+      if (!tri.contains(seg.x) && !tri.contains(seg.y)) {
+        const Seg S(X[seg.x],X[seg.y]);
+        const Tri T(X[tri.x],X[tri.y],X[tri.z]);
+        Ray<TV3> ray(S);
+        count += T.lazy_intersection(ray);
+      }
+    }
+  };
+
+  int collisions(RawArray<const TV3> X) const {
+    GEODE_ASSERT(X.size()==faces->mesh->nodes());
+    this->X.copy(X);
+    edges->update();
+    faces->update();
+    CollisionVisitor visit(edges,faces,X);
+    double_traverse(*edges,*faces,visit,close);
+    return visit.count;
   }
 };
 
@@ -519,7 +589,7 @@ GEODE_PYTHON_MODULE(fractal_helper) {
 
   typedef SimpleCollisions Self;
   Class<Self>("SimpleCollisions")
-    .GEODE_INIT(const TriangleSoup&,const T,bool)
+    .GEODE_INIT(const TriangleSoup&,RawArray<const TV3>,const T,bool)
     .GEODE_METHOD(closest)
     .GEODE_METHOD(energy)
     .GEODE_METHOD(gradient)

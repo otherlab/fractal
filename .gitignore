@@ -10,3 +10,4 @@ config.py
 .sconf_temp
 config.log
 build
+poincare-checkpoint-*.obj

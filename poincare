@@ -6,6 +6,7 @@ from geode import *
 from fractal_helper import *
 from collections import defaultdict
 import sys
+import re
 
 # Depth 4:
 #   ./poincare --mode flop --tolerance 1e-3 --depth 4 --separation .05
@@ -20,6 +21,8 @@ separation = props.add('separation',.8)
 levels = props.add('levels',1)
 degree = props.add('degree',7)
 autosave = props.add('autosave','')
+checkpoint = props.add('checkpoint',20)
+restart = props.add('restart','')
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -277,12 +280,16 @@ def flopsolve():
   # Define problem
   close = separation()
   stiff = 10
-  collisions = SimpleCollisions(fine_lattice_mesh(),close,True)
-  def energy(X):
+  collisions = SimpleCollisions(fine_lattice_mesh(),X0,close,True)
+  def energy(X,strict=True):
     X = X.reshape(-1,3)
-    L = sqr_magnitude(lengths(X)-rest)/2
+    if strict and collisions.collisions(X):
+      return inf
+    Le = lengths(X)-rest
+    L = sqr_magnitude(Le)/2
+    Lm = maxabs(Le/rest)
     C = stiff*collisions.energy(X) if stiff else 0
-    print ('energies: L = %g, C = %g'%(L,C))
+    print ('energies: L = %g (max %g), C = %g'%(L,Lm,C))
     return L+C
   def gradient(X):
     X = X.reshape(-1,3)
@@ -296,20 +303,45 @@ def flopsolve():
   # Test
   dX = 1e-7*random.randn(n,3)
   X = random.randn(n,3)
-  numerical = energy(X+dX)-energy(X-dX)
+  numerical = energy(X+dX,strict=0)-energy(X-dX,strict=0)
   analytic = 2*dot(gradient(X),dX.ravel())
   error = relative_error(numerical,analytic)
   print('numerical = %g, analytic = %g, error = %g'%(numerical,analytic,error))
   assert error<1e-5
 
+  # Restart if requested
+  if restart():
+    tm = TriMesh()
+    tm.read(restart())
+    assert all(tm.elements()==fine_lattice_mesh().elements)
+    X0 = tm.X()
+
+  # Optionally write out checkpoints
+  callback = None
+  if checkpoint():
+    iterations = [0]
+    m = re.match(r'^poincare-checkpoint-(\d+).obj$',restart())
+    if m:
+      iterations[0] = int(m.group(1))
+    def checkwrite(X):
+      iterations[0] += 1
+      if iterations[0]%checkpoint()==0:
+        tm = TriMesh()
+        tm.add_vertices(X.reshape(-1,3))
+        tm.add_faces(fine_lattice_mesh().elements)
+        name = 'poincare-checkpoint-%d.obj'%iterations[0]
+        print('saving %s'%name)
+        tm.write(name)
+    callback = checkwrite
+
   # Solve
   import scipy.optimize
-  result = scipy.optimize.minimize(energy,X0.ravel(),jac=gradient,tol=tolerance())
+  result = scipy.optimize.minimize(energy,X0.ravel(),jac=gradient,tol=tolerance(),callback=callback)
   X = result.x.reshape(-1,3)
   print('energy = %g'%energy(X))
   L = lengths(X)
-  lo,hi = L.min(),L.max()
-  print('length range = %g %g (width %g)'%(lo,hi,hi-lo))
+  lo,hi = (L/rest).min(),(L/rest).max()
+  print('length ratio range = %g %g (width %g)'%(lo,hi,hi-lo))
   print('closest = %g'%collisions.closest(X))
   print('collisions = %d'%collisions.collisions(X))
   return X
@@ -322,6 +354,7 @@ def flop():
     tm.write(name)
   if autosave():
     save_mesh(autosave())
+  flopsolve()
   try:
     import gui
     app = gui.QEApp(sys.argv,True)
