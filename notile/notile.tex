@@ -1,0 +1,104 @@
+\documentclass[11pt]{article}
+\usepackage{amsfonts,amssymb,amsthm,eucal,amsmath}
+\usepackage{graphicx}
+\usepackage[T1]{fontenc}
+\usepackage{latexsym,url}
+\usepackage{array}
+\usepackage{subfig}
+\usepackage{comment}
+\usepackage{color}
+\usepackage{tikz}
+\usepackage{cprotect}
+\usepackage{hyperref}
+\usepackage[nameinlink,noabbrev]{cleveref}
+
+\hypersetup{colorlinks=true,linkcolor=blue}
+\newcommand{\myspace}{\vspace{.1in}\noindent}
+\newcommand{\mymyspace}{\vspace{.1in}}
+\usepackage[inner=30mm, outer=30mm, textheight=225mm]{geometry}
+\creflabelformat{equation}{#2(#1)#3}
+\crefname{equation}{}{}
+\Crefname{equation}{}{}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{prop}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{defn}[theorem]{Definition}
+\newtheorem{notn}[theorem]{Notation}
+\newtheorem{cond}[theorem]{Condition}
+\newtheorem{ex}[theorem]{Example}
+\newtheorem{rmk}[theorem]{Remark}
+\newcommand{\co}{\negthinspace :}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\CP}{\mathbb{CP}}
+\newcommand{\PSL}{\mathrm{PSL}_2(\mathbb{C})}
+\newcommand{\area}{\operatorname{area}}
+\newcommand{\diag}{\operatorname{diag}}
+\newcommand{\nt}{\negthinspace}
+\newcommand{\TODO}{{\color{red} TODO}}
+
+\title{Do hyperbolic tilings isometrically embed in $\R^3$?}
+\author{Geoffrey Irving\thanks{Email: \{irving\}@naml.us, Otherlab, San Francisco, CA, United States}}
+\date{Version 1, \today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Do hyperbolic triangulations and other tilings isometrically embed in 3-space?
+Henry says this is unresolved, and may have been considered by Thurston.
+However, it seems like there is an amazing amount of slack in the result, so
+here are some thoughts.
+\end{abstract}
+
+Let $T$ be the infinite valence 7 hyperbolic triangulation where each edge has length 1.
+Let $T_n$ be the radius $n$ portion of $T$ centered at a fixed origin vertex $0$.  Due to negative
+curvature, the number of triangles in $T_n$ is at least $\alpha^n$ for some $\alpha > 1$.
+
+Assume $T$ has an isometric embedding into $\R^3$, where each triangle is mapped to a unit length flat
+equilateral triangle.
+
+Given a vertex-triangle pair $(v,t)$ with $v \in t \in T$, let $f(v,t) \in \R^9$ be the three vertices
+of triangle $t$ in order starting at $v$ (all triangles are oriented since the hyperbolic plane is
+orientable).  Consider the image $f(T_n) \subset \R^9$: since $T_n$ has radius $\le n$, $f(T_n)$ must
+lie in ball of radius $3n+O(1)$, which therefore has volume at most $\beta (3n+O(1))^9$ where $\beta$
+is the volume of the unit 9-sphere.
+
+Now define
+$$d(n,k) = \sup \left\{ d | \exists q \in \R^9, vt_1 \ne \ldots \ne vt_k \in T_n . \left|f(vt_i) - q\right| < d \right\}$$
+Placing a radius $d(n,k)/2$ 9-sphere around each $f(vt)$ gives the volume inequality
+$$\beta d(n,k)^9 \alpha^n / k < \tau \beta (3n+O(1))^9$$
+where the extra factor of $\tau$ is needed to weed out parts of the little balls that go outside
+the large ball and the fact of two in $d(n,k)/2$.  Solving (and changing $\tau$), we have
+$$d(n,k) < \tau k^{1/9} n \alpha^{-n}.$$
+
+If we instead fix a separation distance $d(n,k) = \epsilon$, solving for $k$ gives
+$$k > \tau_\epsilon \frac{\alpha^n}{n^9}$$
+Thus, for an arbitrarily small notion of closeness, there is an exponentially large set of close triangles
+at most a linear geodesic distance apart.  Call the largest such set $P = P(\epsilon,n)$.
+Consider minimal geodesic paths $\gamma_{ij}$ between all pairs of centers of triangles in $P$.
+
+The next thing to do
+is to analyze the space swept out by the triangles along these paths, in an attempt to prove that the normals
+along at least most of the paths stay close to the source and destination normals (which are all close).
+And the next thing after that is to apply some sort of intermediate value theorem to show that this is impossible:
+either there must be intersections between the triangles as they change height, or we've almost embedded a chunk of
+hyperbolic space into $\R^2$.
+
+I think the second of the above conjectures is easier than the first.  Our plan of attack on the first is to
+define some notion of nonintersecting volume which becomes significantly nonzero if a geodesic path rotates
+out of the plane, and then prove that this volume blows up impossibly fast.  If we succeed, it will likely
+render the above weak calculation superfluous.
+
+The following is rough: Consider what happens when a dihedral angle between two adjacent triangles is bounded
+away from both 0 and $pi$ (neither flat not completely folded).  If we restrict to only considering similarly
+shaped hinges (which we can build into our volume measure), there can only be infinitely many stacked copies
+if they are nested.  Thus, our path space is either locally sparse or locally very nested with a local total order.
+The problem is that this total order is unlikely to conveniently propagate around since adjacent hinges necessarily
+keep flipping.  So this direction may go nowhere.
+
+\end{document}
