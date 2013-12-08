@@ -1,0 +1,24 @@
+#!/usr/bin/env python
+
+from __future__ import division,print_function,unicode_literals
+from geode import *
+from geode.value import parser
+from tim.otherfab import *
+
+props = PropManager()
+meshes = props.add('meshes',None).set([])
+output = props.add('output','').set_abbrev('o').set_required(1)
+parser.parse(props,'Union a bunch of meshes',positional=[meshes])
+
+# Read meshes
+tms = []
+for m in meshes():
+  tm = TriMesh()
+  tm.read(m)
+  tms.append(tm) 
+
+# Union
+tm = csg_union(tms)
+
+# Write
+tm.write(output())
