@@ -20,6 +20,7 @@ tolerance = props.add('tolerance',1e-2)
 separation = props.add('separation',.8)
 levels = props.add('levels',1)
 degree = props.add('degree',7)
+poly = props.add('poly',3)
 autosave = props.add('autosave','')
 checkpoint = props.add('checkpoint',20)
 restart = props.add('restart','')
@@ -179,19 +180,27 @@ def test_mobius():
   assert Mobius.close(t*f,f*tf)
   assert Mobius.close(t*t,Mobius.translation(2*u))
 
-def equilateral_length_from_angle(t):
+@cache
+def equilateral_length():
+  t = 2*pi/degree()
   # The hyperbolic law of cosines for angle t, side s is
   #   cos t = -cos^2 t + sin^2 t cosh a
   #   a = acosh (cos(t)*(1+cos(t))/sin(t)^2)
-  c,s = cos(t),sin(t)
-  return acosh(c*(1+c)/(s*s))
+  if poly()==3:
+    c,s = cos(t),sin(t)
+    return acosh(c*(1+c)/(s*s))
+  elif poly()==4:
+    # cos(t/2) = -cos(t)*cos(t/2)+sin(t)*sin(t/2)*cosh(side)
+    return acosh(cos(t/2)*(1+cos(t))/(sin(t)*sin(t/2)))
+  else:
+    raise NotImplemented(poly())
 
 @cache
 def lattice():
   '''Compute lattice points and transforms of the standard 7-valent triangulation
   of the Poincare disk model of the hyperbolic plane.'''
   a = 2*pi/degree()
-  advance = Mobius.translation((equilateral_length_from_angle(a),0))*Mobius.from_angle(pi)
+  advance = Mobius.translation((equilateral_length(),0))*Mobius.from_angle(pi)
   rotate = Mobius.from_angle(a*arange(degree()))
   levels = [rotate]
   for d in xrange(depth()):
@@ -204,15 +213,13 @@ def lattice():
   print('count = %d'%len(trans))
   return trans
 
-@cache
-def lattice_edges():
-  trans = lattice()
+def lattice_edges(lattice):
   a = 2*pi/degree()
-  tree = ParticleTree(trans*zeros(2),1)
-  step = equilateral_length_from_angle(a)
+  tree = ParticleTree(lattice*zeros(2),1)
+  step = equilateral_length()
   walks = Mobius.translation(step*polar(a*arange(degree())))
   edges = []
-  for i,m in enumerate(trans):
+  for i,m in enumerate(lattice):
     for walk in walks:
       p = m*walk*zeros(2)
       cp,j = tree.closest_point(p,1e-7)
@@ -227,27 +234,58 @@ def interpolate(x,y,t):
   t = asarray(t)[...,None]
   return m*(Mobius.translation(t*dy)*zeros(2))
 
-@cache
-def lattice_mesh():
-  X = lattice()*zeros(2)
-  edges = lattice_edges()
+def find_quads(X,edges):
   near = defaultdict(lambda:set())
   for x,y in edges:
     near[x].add(y)
     near[y].add(x)
-  tris = set()
-  for x,y in edges:
-    for z in near[x]:
-      if z in near[y]:
-        a,b,c = sorted((x,y,z))
-        if cross(X[b]-X[a],X[c]-X[a])<0:
-          b,c = c,b
-        tris.add((a,b,c))
-  return TriangleSoup(sorted(tris))
+  quads = set()
+  for x,y in sort(edges,axis=1):
+    for z in near[y]:
+      if x<z:
+        for w in near[z]:
+          if x<w and x in near[w]:
+            if cross(X[z]-X[x],X[y]-X[x]) > 0:
+              quads.add((x,y,z,w))
+            else:
+              quads.add((x,w,z,y))
+  return asarray(sorted(quads),dtype=int32)
+
+@cache
+def pruned_lattice():
+  if poly()==3:
+    return lattice()
+  X = lattice()*zeros(2)
+  edges = lattice_edges(lattice())
+  return lattice()[unique(find_quads(X,edges).ravel())]
+
+@cache
+def lattice_mesh():
+  X = pruned_lattice()*zeros(2)
+  edges = lattice_edges(pruned_lattice())
+  if poly()==3:
+    near = defaultdict(lambda:set())
+    for x,y in edges:
+      near[x].add(y)
+      near[y].add(x)
+    tris = set()
+    for x,y in edges:
+      for z in near[x]:
+        if z in near[y]:
+          a,b,c = sorted((x,y,z))
+          if cross(X[b]-X[a],X[c]-X[a])<0:
+            b,c = c,b
+          tris.add((a,b,c))
+    return TriangleSoup(sorted(tris))
+  elif poly()==4:
+    quads = find_quads(X,edges)
+    return PolygonSoup(4*ones(len(quads),dtype=int32),quads.ravel())
+  else:
+    raise NotImplemented(poly())
 
 def subdivided():
   mesh = lattice_mesh()
-  X = lattice()*zeros(2)
+  X = pruned_lattice()*zeros(2)
   if levels()==1:
     return mesh,X
   elif levels()==2 or levels()==4:
@@ -432,7 +470,11 @@ def plot():
   pylab.plot(points[:,0],points[:,1],'o')
   # Draw edges
   edges = fine_lattice_mesh().segment_soup().elements
-  print('triangles = %d'%len(fine_lattice_mesh().elements))
+  mesh = fine_lattice_mesh()
+  if isinstance(mesh,TriangleSoup):
+    print('triangles = %d'%len(mesh.elements))
+  else:
+    print('polys = %d'%len(mesh.counts))
   t = linspace(0,1,num=resolution())
   paths = interpolate(points[edges[:,0]].reshape(-1,1,2),points[edges[:,1]].reshape(-1,1,2),t)
   for path in paths:
