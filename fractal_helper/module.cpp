@@ -492,8 +492,7 @@ public:
         closest = min(closest,segment_segment_distance(si,sj));
       },
       [&](const int p, const IV3 tri, const TV3 Xp, const Tri T) {
-        const auto I = T.closest_point(Xp);
-        closest = min(closest,magnitude(Xp-I.x));
+        closest = min(closest,magnitude(Xp-T.closest_point(Xp).x));
       });
     return closest;
   }
@@ -505,8 +504,7 @@ public:
         sum += distance_energy(segment_segment_distance(si,sj));
       },
       [&](const int p, const IV3 tri, const TV3 Xp, const Tri T) {
-        const auto I = T.closest_point(Xp);
-        sum += distance_energy(magnitude(Xp-I.x));
+        sum += distance_energy(magnitude(Xp-T.closest_point(Xp).x));
       });
     return sum;
   }
@@ -570,6 +568,44 @@ public:
     double_traverse(*edges,*faces,visit,close);
     return visit.count;
   }
+
+  Array<TV3> strain_limit(RawArray<const T> restlengths, RawArray<const TV3> X, const T alpha) const {
+    GEODE_ASSERT(restlengths.size()==edges->mesh->elements.size());
+    const auto XL = X.copy();
+    const Array<bool> frozen(X.size());
+    for (const int s : range(restlengths.size())) {
+      const auto e = edges->mesh->elements[s];
+      TV3 v = X[e.y]-X[e.x];
+      const T L = normalize(v);
+      const TV3 dx = .5*alpha*(restlengths[s]-L)*v;
+      XL[e.x] -= dx;
+      XL[e.y] += dx;
+    }
+    traverse(X,
+      [&](const IV2 ei, const IV2 ej, const Seg si, const Seg sj) {
+        const auto I = segment_segment_distance_and_normal(simplex(X[ei.x],X[ei.y]),simplex(X[ej.x],X[ej.y]));
+        if (I.x < close) {
+          const TV3 dx = .5*alpha*(close-I.x)*I.y;
+          XL[ei.x] -= (1-I.z.x)*dx;
+          XL[ei.y] -=    I.z.x *dx;
+          XL[ej.x] += (1-I.z.y)*dx;
+          XL[ej.y] +=    I.z.y *dx;
+        }
+      },
+      [&](const int p, const IV3 tri, const TV3 Xp, const Tri Xtri) {
+        const auto I = Xtri.closest_point(Xp);
+        auto N = Xp-I.x;
+        const T d = normalize(N);
+        if (d < close) {
+          const TV3 dx = .5*alpha*(close-d)*N;
+          XL[p] += dx;
+          XL[tri.x] -= I.y.x*dx;
+          XL[tri.y] -= I.y.y*dx;
+          XL[tri.z] -= I.y.z*dx;
+        }
+      });
+    return XL;
+  }
 };
 
 GEODE_DEFINE_TYPE(SimpleCollisions)
@@ -594,5 +630,6 @@ GEODE_PYTHON_MODULE(fractal_helper) {
     .GEODE_METHOD(energy)
     .GEODE_METHOD(gradient)
     .GEODE_METHOD(collisions)
+    .GEODE_METHOD(strain_limit)
     ;
 }

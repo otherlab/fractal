@@ -23,6 +23,9 @@ degree = props.add('degree',7)
 autosave = props.add('autosave','')
 checkpoint = props.add('checkpoint',20)
 restart = props.add('restart','')
+method = props.add('method','CG').set_allowed('''jitter limit
+  Nelder-Mead Powell CG BFGS Newton-CG Anneal L-BFGS-B TNC COBYLA SLSQP dogleg trust-ncg'''.split())
+flopseed = props.add('flopseed',8231110)
 parser.parse(props,'Hyperbolic triangulation layout',)
 
 c2r_dtype = {dtype(complex64):dtype(float32),dtype(complex128):dtype(float64)}
@@ -259,6 +262,24 @@ def subdivided():
 fine_lattice_mesh = cache(lambda:subdivided()[0])
 fine_points = cache(lambda:subdivided()[1])
 
+def jittermin(f,X,alpha=.99,beta=1.001,callback=None):
+  random.randn(172131)
+  step = 1.
+  fx = f(X)
+  while 1:
+    X2 = X+step*random.randn(*X.shape)
+    f2 = f(X2)
+    if f2 < fx:
+      step *= beta
+      X = X2
+      fx = f2
+      print('SUCCESS: step %g'%step)
+      if callback is not None:
+        callback(X)
+    else:
+      step *= alpha
+      print('FAIL: step %g'%step)
+
 @cache
 def flopsolve():
   X0 = fine_points()
@@ -274,7 +295,7 @@ def flopsolve():
   # Move to 3D
   X0 = hstack([X0,zeros(n)[:,None]])
   # Apply some noise so that everything doesn't start in the plane
-  random.seed(8231110)
+  random.seed(flopseed())
   X0 += .1*random.randn(n,3)
 
   # Define problem
@@ -299,6 +320,14 @@ def flopsolve():
       return (L+C).ravel()
     else:
       return L.ravel()
+  def worst(X):
+    if collisions.collisions(X):
+      C = inf
+    else:
+      C = close-collisions.closest(X)
+    L = maxabs(lengths(X)/rest-1)
+    print ('worst: L = %g, C = %g'%(L,C))
+    return max(L,C)
 
   # Test
   dX = 1e-7*random.randn(n,3)
@@ -307,7 +336,7 @@ def flopsolve():
   analytic = 2*dot(gradient(X),dX.ravel())
   error = relative_error(numerical,analytic)
   print('numerical = %g, analytic = %g, error = %g'%(numerical,analytic,error))
-  assert error<1e-5
+  assert error<1e-4
 
   # Restart if requested
   if restart():
@@ -335,9 +364,27 @@ def flopsolve():
     callback = checkwrite
 
   # Solve
-  import scipy.optimize
-  result = scipy.optimize.minimize(energy,X0.ravel(),jac=gradient,tol=tolerance(),callback=callback)
-  X = result.x.reshape(-1,3)
+  if method()=='jitter':
+    jittermin(worst,X0,callback=callback)
+  elif method()=='limit':
+    X = X0
+    wX = worst(X)
+    alpha = .1
+    print('worst start = %g'%worst(X))
+    while alpha > 1e-10:
+      X2 = collisions.strain_limit(rest,X,alpha)
+      w2 = worst(X2)
+      if wX > w2 or isfinite(w2):
+        X = X2
+        wX = w2
+        alpha *= 1
+      else:
+        alpha *= .9
+      print('alpha = %g'%alpha)
+  else:
+    import scipy.optimize
+    result = scipy.optimize.minimize(energy,X0.ravel(),jac=gradient,tol=tolerance(),callback=callback,method=method())
+    X = result.x.reshape(-1,3)
   print('energy = %g'%energy(X))
   L = lengths(X)
   lo,hi = (L/rest).min(),(L/rest).max()
