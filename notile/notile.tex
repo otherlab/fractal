@@ -101,4 +101,27 @@ if they are nested.  Thus, our path space is either locally sparse or locally ve
 The problem is that this total order is unlikely to conveniently propagate around since adjacent hinges necessarily
 keep flipping.  So this direction may go nowhere.
 
+More roughness: consider four close triangles $a,b,c,d$ in order from lowest to highest along their roughly
+shared normal $n$, and the geodesic paths $\gamma_{ac}$ and $\gamma_{db}$ both parameterized on $s \in [0,1]$.
+Consider the function
+$$h(s) = (n_{ac}(s) + n_{bd}(s)) \cdot \left(\gamma_{ac}(s) - \gamma_{bd}(s)\right)$$
+where $n_{ac}(s)$ and $n_{bd}(s)$ are (roughly) the normals to $\gamma_{ac}$ and $\gamma_{bd}$.  $h(s)$ can
+be made continuous if we add a delay at each edge crossing to slowly change normal.
+We have $h(0) < 0$, $h(1) > 0$, so there must be a zero crossing $h(s^*) = 0$.  What is happening at this
+crossing?  There are several (rough) options:
+\begin{enumerate}
+\item The two points lie in the same triangle of the same surface (or say within geodesic distance 2 on the surface).
+\item The two points are in different ``simplex classes'': triangle interior, edge interior, vertex.
+\item The two points are both in the interior of their triangles, and are far apart (necessary to cross).
+      Note that they may have opposite normals (is this a problem?).
+\item Both points are on the interior of their edges, but are on different looking hinges.  If the hinges
+      are sufficiently similar, $h(s)$ can't change sign.
+\item Both points are very close to a vertex.  I believe this still rules out a crossing.
+\end{enumerate}
+It seems like all but the first case should produce a nontrivial nonintersecting volume measure assigned to
+this crossing event.  Actually I don't know whether these events can be arranged to be nonintersecting so
+as to produce a contradiction.  In any case, we have another problem: if we have an exponential number of
+close triangles in $T_n$, is there at least an exponential number of pairs of pairs whose geodesics don't
+cross, and whose heights have the right ordering?
+
 \end{document}
