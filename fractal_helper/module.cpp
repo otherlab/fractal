@@ -38,9 +38,9 @@ using std::endl;
 static Array<int> boundary_edges_to_faces(const TriangleSoup& mesh, RawArray<const Vector<int,2>> edges) {
   Array<int> face(edges.size(),false);
   auto incident = mesh.incident_elements();
-  for (int s=0;s<edges.size();s++) {
+  for (const int s : range(edges.size())) {
     GEODE_ASSERT(incident.valid(edges[s][0]));
-    for (int t : incident[edges[s][0]])
+    for (const int t : incident[edges[s][0]])
       if (mesh.elements[t].contains(edges[s][1])) {
         face[s] = t;
         goto found;
@@ -57,7 +57,7 @@ static vector<Array<TV2>> iterate_L_system(NdArray<const T> start_angle_per_leve
   vector<Array<TV2>> curves;
   string pattern = axiom;
   double start_angle = 0;
-  for (int level : range(levels+1)) {
+  for (const int level : range(levels+1)) {
     // Trace curve
     TV2 X;
     const double step = pow(shrink_factor,level);
@@ -110,15 +110,15 @@ static Ref<TriangleSoup> branching_mesh(const int branching, const int levels, c
     const int hi = lo+n+1-closed,
               lom = n+1-closed,
               him = branching*n+1-closed;
-    for (int i : range(n)) {
+    for (const int i : range(n)) {
       const int a = lo+i,
                 ap = lo+(i+1)%lom;
       const int b = hi+branching*i;
       const int mid = branching/2;
       tris.append_assuming_enough_space(vec(ap,a,b+mid));
-      for (int j : range(mid))
+      for (const int j : range(mid))
         tris.append_assuming_enough_space(vec(a,b+j,hi+(branching*i+j+1)%him));
-      for (int j : range(mid,branching))
+      for (const int j : range(mid,branching))
         tris.append_assuming_enough_space(vec(ap,b+j,hi+(branching*i+j+1)%him));
     }
     lo = hi;
@@ -142,7 +142,7 @@ typedef vector<Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>,Array<Matrix<T,4>>>> 
 static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,int>& vert_map, Array<int>& verts) {
   int start = -1;
   int score = numeric_limits<int>::max();
-  for (int a=0;a<neighbors.size();a++) {
+  for (const int a : range(neighbors.size())) {
     int* s = vert_map.get_pointer(neighbors[a]);
     if (s && score>*s) {
       start = a;
@@ -150,7 +150,7 @@ static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,i
     }
   }
   GEODE_ASSERT(start>=0);
-  for (int j : range(neighbors.size())) {
+  for (const int j : range(neighbors.size())) {
     const int a = neighbors[(start+j)%neighbors.size()];
     if (!vert_map.contains(a)) {
       vert_map.set(a,vert_map.size());
@@ -163,9 +163,9 @@ static void add_rotated_neighbors(RawArray<const int> neighbors, Hashtable<int,i
 static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const TriangleSoup& mesh, RawArray<const TV3> X, RawArray<const T> thick) {
   const auto adjacent_elements = mesh.adjacent_elements();
   UnionFind union_find(3*mesh.elements.size());
-  for (int t0 : range(mesh.elements.size())) {
+  for (const int t0 : range(mesh.elements.size())) {
     const auto nodes0 = mesh.elements[t0];
-    for (int i=0;i<3;i++) {
+    for (const int i : range(3)) {
       const int t1 = adjacent_elements[t0][i];
       if (t1>=0) {
         const auto nodes1 = mesh.elements[t1];
@@ -179,15 +179,15 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const Triangle
   Array<int> map(union_find.size(),false);
   Array<TV3> X2;
   Array<T> thick2;
-  for (int t : range(mesh.elements.size()))
-    for (int i : range(3))
+  for (const int t : range(mesh.elements.size()))
+    for (const int i : range(3))
       if (union_find.is_root(3*t+i)) {
         map[3*t+i] = X2.append(X[mesh.elements[t][i]]);
         thick2.append(thick[mesh.elements[t][i]]);
       }
   Array<Vector<int,3>> tris2(mesh.elements.size(),false);
-  for (int t : range(mesh.elements.size()))
-    for (int i : range(3))
+  for (const int t : range(mesh.elements.size()))
+    for (const int i : range(3))
       tris2[t][i] = map[union_find.find(3*t+i)];
   return tuple(new_<TriangleSoup>(tris2),X2,thick2);
 }
@@ -205,11 +205,11 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
   const auto adjacent_elements = mesh.adjacent_elements();
   const auto incident_elements = mesh.incident_elements();
   int boundary_count = 0;
-  for (int p : range(patches)) {
+  for (const int p : range(patches)) {
     PatchInfo info;
     // Determine transform from the first triangle
     info.boundary = false;
-    for (int i=0;i<count;i++)
+    for (const int i : range(count))
       if (adjacent_elements[count*p+i].min()<0) {
         info.boundary = true;
         break;
@@ -227,28 +227,28 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
     Hashtable<int> ours;
     Hashtable<int,int> vert_map;
     Array<int> verts;
-    for (int t : count*p+range(count))
-      for (int i : mesh.elements[t])
+    for (const int t : count*p+range(count))
+      for (const int i : mesh.elements[t])
         if (ours.set(i))
           vert_map.set(i,verts.append(i));
     // Collect one ring vertices
-    for (int i : range(verts.size()))
+    for (const int i : range(verts.size()))
       add_rotated_neighbors(sorted_neighbors[verts[i]],vert_map,verts);
     // Collect two ring vertices adjacent to extraordinary vertices to account for the larger stencil of modified Loop subdivision
-    for (int i : range(ours.size(),verts.size()))
+    for (const int i : range(ours.size(),verts.size()))
       if (two_ring || sorted_neighbors[verts[i]].size()!=6)
         add_rotated_neighbors(sorted_neighbors[verts[i]],vert_map,verts);
     // Compute signature
-    for (int i : verts) {
+    for (const int i : verts) {
       info.X.append(inv_transform.homogeneous_times(X[i]));
       info.thick.append(inv_scale*thickness[i]);
     }
     // Check for signature matches
-    for (int r : range(reps.size())) {
+    for (const int r : range(int(reps.size()))) {
       auto& rep = reps[r];
       if (rep.x.X.size()!=info.X.size())
         goto next;
-      for (int i : range(info.X.size()))
+      for (const int i : range(info.X.size()))
         if (sqr_magnitude(rep.x.X[i]-info.X[i])>sqr(tolerance))
           goto next;
       rep.y.append(transform);
@@ -261,22 +261,22 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
       boundary_count += info.boundary;
       Array<Matrix<T,4>> transforms(1,false);
       transforms[0] = transform;
-      names.append(reps.size());
+      names.append(int(reps.size()));
       // Fill in triangles
       Array<int> tris;
       Hashtable<int> tri_set;
-      for (int i=0;i<count;i++) {
+      for (const int i : range(count)) {
         const int t = count*p+i;
         tris.append(t);
         tri_set.set(t);
       }
-      for (int v : verts)
-        for (int t : incident_elements[v])
+      for (const int v : verts)
+        for (const int t : incident_elements[v])
           if (tri_set.set(t))
             tris.append(t);
-      for (int t : tris) {
+      for (const int t : tris) {
         Vector<int,3> tri;
-        for (int i=0;i<3;i++) {
+        for (const int i : range(3)) {
           const int* p = vert_map.get_pointer(mesh.elements[t][i]);
           if (!p)
             goto skip;
@@ -294,7 +294,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
 
   // Extract one ring meshes for each representative
   Instances interior, boundary;
-  for (int r : range(reps.size())) {
+  for (const int r : range(int(reps.size()))) {
     const PatchInfo& info = reps[r].x;
     const auto fixed = make_manifold(new_<TriangleSoup>(info.tris),info.X,info.thick);
     GEODE_ASSERT(fixed.x->nodes()==fixed.y.size());
@@ -336,7 +336,7 @@ static T settling_energy(const vector<Tuple<Ref<TriangleSoup>,Array<const TV3>,A
   for (auto& inst : *instances) {
     auto areas = inst.x->vertex_areas(inst.y);
     for (auto t : inst.z)
-      for (int p=0;p<areas.size();p++)
+      for (const int p : range(areas.size()))
         energy += areas[p]*(dot(up,t.homogeneous_times(inst.y[p]))-ground);
   }
   return energy;
@@ -353,8 +353,8 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>> torus_mesh(const T R, const T r, cons
   Array<Vector<int,3>> tris(2*N*n,false);
   const T dA = 2*pi/N,
           da = 2*pi/n;
-  for (int i : range(N))
-    for (int j : range(n)) {
+  for (const int i : range(N))
+    for (const int j : range(n)) {
       const T u = dA*i, v = da*j;
       const T s = R+r*cos(v);
       const int I = i*n+j;
