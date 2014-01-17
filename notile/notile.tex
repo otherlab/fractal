@@ -26,6 +26,7 @@
 \newtheorem{defn}[theorem]{Definition}
 \newtheorem{notn}[theorem]{Notation}
 \newtheorem{cond}[theorem]{Condition}
+\newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{ex}[theorem]{Example}
 \newtheorem{rmk}[theorem]{Remark}
 \newcommand{\co}{\negthinspace :}
@@ -55,9 +56,13 @@ However, it seems like there is an amazing amount of slack in the result, so
 here are some thoughts.
 \end{abstract}
 
+\section{Hyperbolic triangulations}
+
 Let $T$ be the infinite valence 7 hyperbolic triangulation where each edge has length 1.
 Let $T_n$ be the radius $n$ portion of $T$ centered at a fixed origin vertex $0$.  Due to negative
 curvature, the number of triangles in $T_n$ is at least $\alpha^n$ for some $\alpha > 1$.
+
+\section{Isometric embeddings}
 
 Assume $T$ has an isometric embedding into $\R^3$, where each triangle is mapped to a unit length flat
 equilateral triangle.
@@ -123,5 +128,25 @@ this crossing event.  Actually I don't know whether these events can be arranged
 as to produce a contradiction.  In any case, we have another problem: if we have an exponential number of
 close triangles in $T_n$, is there at least an exponential number of pairs of pairs whose geodesics don't
 cross, and whose heights have the right ordering?
+
+\begin{lemma}
+Let $P \subset B_r$ be a set of points separated by distance at least 1 in a hyperbolic disk of radius $r$
+with $|P| = \Theta(\beta^r)$ for some $\beta > 1$.  Totally order $P$.  Then there exists $\kappa > 1$
+and an ordered subset $p_1, \ldots, p_{2n} \in P$ with $n = \Theta(\kappa^r)$ s.t.\ the geodesics
+
+
+Let B(r) be a ball of radius r in the hyperbolic plane, which has
+volume Theta(A^r).  Choose Theta(A^r/r^9) points x_i pairwise
+separated by at least distance 1, and total order them somehow: x_1 <
+x_2 < ...  Does there exist an absolute constant B > 1 s.t. there
+always exists a totally ordered subsequence y_1 < ... < y_(2n) of size
+Theta(B^r) s.t. the n geodesics from y_i to y_(i+n) are pairwise
+separated by at least 1?
+
+Intuition: x_i are the centers of triangles that are very close
+together, and we want to arrive at a contradiction by analyzing how
+the various geodesics between x_i to x_j "change height order".  If
+the above was true, we wouldn't have to worry about the geodesics
+dodging contradictions by simply sharing triangles.
 
 \end{document}
