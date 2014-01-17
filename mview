@@ -18,6 +18,11 @@ tm.read(mesh())
 mesh = cache(lambda:TriangleSoup(tm.elements()))
 X = cache(lambda:tm.X())
 
+# Print information
+print('vertices = %d'%tm.n_vertices())
+print('edges = %d'%tm.n_edges())
+print('faces = %d'%tm.n_faces())
+
 # View
 app = gui.QEApp(sys.argv,True)
 main = gui.MainWindow(props)
