@@ -1,1 +1,5 @@
 notile.pdf
+*.aux
+*.log
+*.fls
+*.out
