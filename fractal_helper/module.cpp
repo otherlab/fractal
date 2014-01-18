@@ -611,6 +611,13 @@ public:
 GEODE_DEFINE_TYPE(SimpleCollisions)
 }
 
+Box<T> dihedral_angle_range(const TriMesh& mesh) {
+  Box<T> angles;
+  for (const auto e : mesh.edge_handles())
+    angles.enlarge(mesh.dihedral_angle(e));
+  return angles;
+}
+
 GEODE_PYTHON_MODULE(fractal_helper) {
   GEODE_FUNCTION(boundary_edges_to_faces)
   GEODE_FUNCTION(iterate_L_system)
@@ -622,6 +629,7 @@ GEODE_PYTHON_MODULE(fractal_helper) {
   GEODE_FUNCTION(make_manifold)
   GEODE_FUNCTION(boundary_curve_at_height)
   GEODE_FUNCTION(unit_spring_energy_gradient)
+  GEODE_FUNCTION(dihedral_angle_range)
 
   typedef SimpleCollisions Self;
   Class<Self>("SimpleCollisions")

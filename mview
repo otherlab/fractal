@@ -2,6 +2,7 @@
 
 from __future__ import division,print_function,unicode_literals
 from geode.value import parser
+from fractal_helper import dihedral_angle_range
 from geode import *
 import gui
 import sys
@@ -22,6 +23,7 @@ X = cache(lambda:tm.X())
 print('vertices = %d'%tm.n_vertices())
 print('edges = %d'%tm.n_edges())
 print('faces = %d'%tm.n_faces())
+print('dihedrals = %g %g'%tuple(180/pi*asarray(dihedral_angle_range(tm))))
 
 # View
 app = gui.QEApp(sys.argv,True)
