@@ -1,0 +1,221 @@
+#!/usr/bin/env python
+
+from __future__ import division,print_function,unicode_literals
+from geode.value import parser
+from geode.geometry.platonic import *
+from geode import *
+import sys
+import re
+
+# Properties
+props = PropManager()
+side = props.add('side',1.).set_help('side length of original infinitesimal triangle')
+body_side = props.add('body_side',.8).set_help('side length of triangle body')
+hole_side = props.add('hole_side',0.).set_help('side length of hole')
+thickness = props.add('thickness',.1).set_help('triangle thickness')
+rod_radius = props.add('rod_radius',.1).set_help('radius of a rod')
+stop_radius = props.add('stop_radius',.2).set_help('radius of the ends of a rod')
+inner_radius = props.add('inner_radius',.15).set_help('inner barrel radius')
+outer_radius = props.add('outer_radius',.25).set_help('outer barrel radius')
+stop_width = props.add('stop_width',.1).set_help('width of the end of a rod')
+barrel_width = props.add('barrel_width',.4).set_help('width of a barrel')
+lo_count = props.add('lo_count',6).set_help('low resolution')
+hi_count = props.add('hi_count',17).set_help('high resolution')
+types = props.add('types','012').set_help('0 = none, 1 = rod, 2 = barrel')
+union = props.add('union',True).set_help('perform csg union')
+separated = props.add('separated',True).set_help('use entirely separated hinges')
+parser.parse(props,'Hinged triangle generator')
+
+@cache
+def counts():
+  return lo_count(),hi_count()
+
+@cache
+def body():
+  t = thickness()/2
+  br = sqrt(1/3)*body_side() 
+  hr = sqrt(1/3)*hole_side()
+  if not separated():
+    if hr:
+      return surface_of_revolution(0,(0,0,1),(br,br,hr,hr),(-t,t,t,-t),3,periodic=1)
+    else:
+      return apply(Rotation.from_angle_axis(pi/3,(0,0,1)),variable_sor((br,br),(-t,t),counts=(3,3)))
+  else:
+    raise NotImplemented()    
+
+def circle(r,n):
+  "Delaunay triangulation of a circle with n sides"
+  X = r*polar(2*pi/n*arange(n))
+  return delaunay_points(X),X
+
+def annulus(r0,r1,n0,n1):
+  "Delaunay triangulation of an annulus with inner radius r0, outer radius r1, and counts n0, n1"
+  X = concatenate([r0*polar(2*pi/n0*arange(n0)),r1*polar(2*pi/n1*arange(n1))])
+  mesh = delaunay_points(X).mutate()
+  for f in mesh.faces():
+    if mesh.face_vertices(f).max()<n0:
+      mesh.erase_face(f,0)
+  return mesh,X
+
+def variable_sor(radius,height,counts,periodic=False):
+  "A closed surface of revolution where we allow a variable number of points at each height"
+  n = len(radius) 
+  radius,height,counts = map(asarray,(radius,height,counts))
+  assert radius.shape==height.shape==counts.shape==(n,)
+  offsets = concatenate([[0],cumsum(counts)])
+  def with_z(xy,z):
+    X = empty((len(xy),3))
+    X[:,:2] = xy
+    X[:,2] = z
+    return X
+  X = [with_z(r*polar(2*pi/k*arange(k)),z) for r,z,k in zip(radius,height,counts)]
+  tris = []
+  if not periodic:
+    tris.extend((delaunay_points(X[0][:,:2].copy()).elements()[:,::-1],
+                 delaunay_points(X[-1][:,:2].copy()).elements()+offsets[-2]))
+  for i in xrange(n-1+periodic):
+    tris.append((annulus(1,2,counts[i],counts[(i+1)%n])[0].elements()[:,::-1]+offsets[i])%offsets[-1])
+  return TriangleSoup(concatenate(tris)),concatenate(X)
+
+def extrude((mesh,xy),z):
+  "Extrude a flat mesh"
+  xy = asarray(xy)
+  z = asarray(z)
+  assert 0<=z.ndim<=1
+  if not z.ndim:
+    z = array([-z,z])/2
+  else:
+    assert len(z)==2
+  assert xy.ndim==2 and xy.shape[-1]==2
+  n = len(xy)
+  X = empty((2,n,3))
+  X[:,:,:2] = xy
+  X[:,:,2] = z[:,None]
+  tris = []
+  for e in mesh.boundary_edges():
+    i = mesh.src(e)
+    j = mesh.dst(e)
+    tris.append((j,i,j+n)) 
+    tris.append((i,i+n,j+n))
+  tris = concatenate([tris,mesh.elements()[:,::-1],n+mesh.elements()])
+  return TriangleSoup(tris.astype(int32)),X.reshape(-1,3)
+
+def apply(f,(mesh,X)):
+  return mesh,(f*X if isinstance(f,(Frames,Rotation.Rotations3d)) else f(X))
+
+def connector(r1,n1,z):
+  lo = lo_count()
+  if lo&1:
+    a = 2*pi/lo/2
+  else:
+    a = 2*pi/lo
+    xm = side()/tan(pi/3)-r1
+  z0 = r1*sin(a)
+  x0 = side()/tan(pi/3)-r1*cos(a)
+  z1 = thickness()/2
+  x1 = body_side()/2/tan(pi/3)
+  if lo&1:
+    flat = ((x1,z1),(x0,z0),(x0,-z0),(x1,-z1))
+  else:
+    flat = ((x1,z1),(x0,z0),(xm,0),(x0,-z0),(x1,-z1))
+  mesh = MutableTriangleTopology()
+  mesh.add_vertices(len(flat))
+  mesh.add_faces([(0,i+1,i) for i in xrange(1,len(flat)-1)])
+  return apply(Rotation.from_rotated_vector((0,0,1),(0,1,0)),extrude((mesh,flat),z))
+
+@cache
+def rod():
+  x = sqrt(1/3)*side()
+  r = Rotation.from_rotated_vector((0,0,1),(0,1,0))
+  f = Frames((x,0,0),r)
+  r0 = rod_radius()
+  r1 = stop_radius()
+  w = body_side()
+  sw = stop_width()
+  lo,hi = counts()
+  rod = apply(f,variable_sor([r1,r1,r0,r0,r1,r1],array([0,sw,sw,w-sw,w-sw,w])-w/2,[lo,lo,hi,hi,lo,lo]))
+  return [rod,connector(r1,lo,(-w/2,sw-w/2)),connector(r1,lo,(w/2-sw,w/2))]
+
+@cache
+def barrel():
+  s = side()
+  x = sqrt(1/3)*s
+  r = Rotation.from_rotated_vector((0,0,1),(0,1,0))
+  f = Frames((x,0,0),r)
+  bw = barrel_width()
+  r0 = inner_radius()
+  r1 = outer_radius()
+  lo,hi = counts()
+  barrel = apply(f,variable_sor([r0,r1,r1,r0],bw/2*asarray([-1,-1,1,1]),[hi,lo,lo,hi],periodic=1))
+  return [barrel,connector(r1,lo,(-bw/2,bw/2))]
+
+@cache
+def meshes():
+  rs = Rotation.from_angle_axis(2*pi/3*arange(3),(0,0,1))
+  kinds = {'0':[],'1':rod(),'2':barrel()}
+  meshes = [body()]+[apply(rs[i],m) for i in xrange(3) for m in kinds[types()[i]]]
+  for mesh,X in meshes:
+    assert isinstance(mesh,TriangleSoup)
+    assert isinstance(X,ndarray)
+  print('types = %s'%types())
+  return meshes
+
+@cache
+def merged():
+  offset = 0
+  tris = []
+  X = []
+  for m,x in meshes():
+    tris.append(m.elements+offset)
+    X.append(x)
+    offset += len(x)
+  m,x = TriangleSoup(concatenate(tris)),concatenate(X)
+  print('raw vertices = %d'%len(x))
+  print('raw faces    = %d'%len(m.elements))
+  if union():
+    import tim.fab.geom
+    from tim.otherfab import csg_union
+    from geode.openmesh import decimate
+    tm = TriMesh()
+    tm.add_vertices(x)
+    tm.add_faces(m.elements)
+    tim.fab.geom.offset_mesh(tm,1e-6)
+    tm = csg_union([tm])
+    decimate(tm,max_quadric_error=1e-3)
+    m = TriangleSoup(tm.elements())
+    x = tm.X()
+    print('vertices = %d\nfaces    = %d'%(len(x),len(m.elements)))
+  return m,x
+
+def main():
+  def save_mesh(name='poincare-instance.obj'):
+    tm = TriMesh()
+    tm.add_vertices(merged()[1])
+    tm.add_faces(merged()[0].elements)
+    tm.write(name)
+  try:
+    import gui
+    app = gui.QEApp(sys.argv,True)
+    main = gui.MainWindow(props)
+    main.view.add_scene('mesh',
+      gui.MeshScene(props,cache(lambda:merged()[0]),cache(lambda:merged()[1]),(.2,.2,1),(0,1,0)))
+    main.add_menu_item('File','Save',save_mesh,'')
+    main.init()
+    main.view.show_all(1)
+    app.run()
+  except ImportError:
+    print('Warning: other/gui not found, falling back to matplotlib')
+    X = merged()[1]
+    tris = merged()[0].elements
+    # Rescale since matplotlib is broken
+    X -= X.min(axis=0)
+    X /= X.max()
+    # Plot
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    import matplotlib.pyplot as plt
+    Axes3D(plt.figure()).add_collection3d(Poly3DCollection(X[tris]))
+    plt.show()
+
+if __name__=='__main__':
+  main()
