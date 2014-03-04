@@ -13,7 +13,11 @@ def limit_donkey_equity(k):
   where a is the probability of winning with AA (splitting ties).  Important properties:
     1. p is continuous.
     2. If t is a dyadic rational, p[t] is a function of simpler dyadic rationals.
-  This provides an easy, superfast way of computing p."""
+  This provides an easy, superfast way of computing p.
+
+  Bug: actually, splitting ties doesn't produce the right answer.  To be correct, "a" below should
+  become b/(1-c), where a is the win probability and c is the tie probability.  Still a fractal, though.
+  """
   a = 893604787/1048786200
   p = zeros(1)
   for k in xrange(k):

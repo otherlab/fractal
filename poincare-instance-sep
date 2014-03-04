@@ -1,0 +1,144 @@
+#!/usr/bin/env python
+
+from __future__ import division,print_function,unicode_literals
+from geode.value import parser
+from geode.geometry.platonic import *
+from fractal_helper import *
+from tim.cgal import delaunay_polygon
+from geode import *
+import sys
+import re
+
+# Properties, with length units in mm.
+props = PropManager()
+side = props.add('side',18.5).set_help('side length of original infinitesimal triangle')
+thickness = props.add('thickness',.7).set_help('minimum wall thickness')
+separation = props.add('separation',.5).set_help('minimum separation')
+max_angle = props.add('max_angle',170.).set_help('maximum dihedral angle in degrees')
+count = props.add('count',17).set_help('resolution of the barrel')
+barrel_width = props.add('barrel_width',4.).set_help('width of a barrel')
+side_cut = props.add('side_trim',4.).set_help('cut the corners back by the given length')
+parser.parse(props,'Hinged triangle generator')
+
+def solve(f,lo,hi):
+  x = scipy.optimize.brentq(f,lo,hi)
+  assert allclose(f(x),0)
+  return x
+
+@cache
+def body_side():
+  # The body triangle can't have edge length side(), since it has finite thickness
+  # and is adjacent to another triangle.  The two triangles need to be able to
+  # rotate by max_angle().
+  cs = sqrt(3)/6*side() # Center to side distance
+  t = thickness()
+  s = separation()
+  a = max_angle()/2
+  # Erode center to side distance to make room for hing
+  erode = (s/2+t/2*cos(a))/sin(a)
+  bcs = cs-erode
+  return 6/sqrt(3)*bcs
+
+@cache
+def barrel_inner_radius():
+  # The inner radius must be large enough to clear a width = thickness band of triangle material
+  cs = sqrt(3)/6*side() 
+  bcs = sqrt(3)/6*body_side()
+  t = thickness()
+  s = separation()
+  return separation()+magnitude((cs-bcs+t,t/2))
+
+@cache
+def barrel_outer_radius():
+  return barrel_inner_radius()+thickness()
+
+@cache
+def body():
+  br = sqrt(1/3)*body_side()
+  cs = sqrt(3)/6*side()
+  bcs = sqrt(3)/6*body_side()
+  t = thickness()
+  s = separation()
+  aa = 2*pi/3*arange(3)
+  hx = bcs-t,cs-barrel_outer_radius()-s
+  hy = barrel_width()/2+s
+  hole = asarray([(hx[0],hy),(hx[0],-hy),(hx[1],-hy),(hx[1],hy)])
+  if not side_cut():
+    polys = [br*polar(aa+pi/3)]
+  else:
+    c = side_cut()
+    y = body_side()/2-side_cut()
+    polys = [(Rotation.from_angle(aa).reshape(-1,1)*[(bcs,-y),(bcs,y)]).reshape(-1,2)]
+  print(polys[0])
+  print(hole)
+  for a in aa:
+    polys.append(Rotation.from_angle(a)*hole) 
+  # Mesh polygons
+  import tim.cgal
+  soup,X,_ = tim.cgal.delaunay_polygon(polys,0,0,False)
+  mesh = MutableTriangleTopology()
+  mesh.add_vertices(len(X))
+  mesh.add_faces(soup.elements)
+  return extrude((mesh,X),(-t/2,t/2))
+
+def apply(f,(mesh,X)):
+  return mesh,(f*X if isinstance(f,(Frames,Rotation.Rotations3d)) else f(X))
+
+@cache
+def barrel():
+  cx = sqrt(3)/6*side()
+  r0 = barrel_inner_radius()
+  r1 = barrel_outer_radius()
+  w = barrel_width()/2
+  return surface_of_revolution((cx,0,0),(0,1,0),resolution=count(),
+                               radius=(r0,r1,r1,r0),height=(-w,-w,w,w),periodic=True)
+
+@cache
+def merged():
+  tris = []
+  X = []
+  offset = 0
+  for m,x in body(),barrel():
+    tris.append(m.elements+offset)
+    X.append(x)
+    offset += len(x)
+  return TriangleSoup(concatenate(tris)),concatenate(X)
+
+def main():
+  def save_mesh(name='poincare-instance.obj'):
+    tm = TriMesh()
+    tm.add_vertices(merged()[1])
+    tm.add_faces(merged()[0].elements)
+    tm.write(name)
+  try:
+    import gui
+    app = gui.QEApp(sys.argv,True)
+    main = gui.MainWindow(props)
+    def add_mesh(name,mesh):
+      def m():
+        m,x = mesh()
+        print('%s: vertices %d, faces %d'%(name,len(x),len(m.elements)))
+        return m
+      main.view.add_scene(name,gui.MeshScene(props,cache(m),cache(lambda:mesh()[1]),(.2,.2,1),(0,1,0)))
+    add_mesh('body',body)
+    add_mesh('barrel',barrel)
+    main.add_menu_item('File','Save',save_mesh,'')
+    main.init()
+    main.view.show_all(1)
+    app.run()
+  except ImportError:
+    print('Warning: other/gui not found, falling back to matplotlib')
+    X = merged()[1]
+    tris = merged()[0].elements
+    # Rescale since matplotlib is broken
+    X -= X.min(axis=0)
+    X /= X.max()
+    # Plot
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+    import matplotlib.pyplot as plt
+    Axes3D(plt.figure()).add_collection3d(Poly3DCollection(X[tris]))
+    plt.show()
+
+if __name__=='__main__':
+  main()

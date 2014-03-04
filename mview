@@ -4,30 +4,45 @@ from __future__ import division,print_function,unicode_literals
 from geode.value import parser
 from fractal_helper import dihedral_angle_range
 from geode import *
-import gui
 import sys
 import re
 
 # Properties
 props = PropManager()
-mesh = props.add('mesh','').set_required(1)
-parser.parse(props,'One-off mesh viewer',positional=[mesh])
+meshname = props.add('mesh','').set_required(1)
+parser.parse(props,'One-off mesh viewer',positional=[meshname])
 
 # Load
-tm = TriMesh()
-tm.read(mesh())
-mesh = cache(lambda:TriangleSoup(tm.elements()))
-X = cache(lambda:tm.X())
+mesh,X = read_soup(meshname())
 
 # Print information
-print('vertices = %d'%tm.n_vertices())
-print('edges = %d'%tm.n_edges())
-print('faces = %d'%tm.n_faces())
-print('dihedrals = %g %g'%tuple(180/pi*asarray(dihedral_angle_range(tm))))
+print('vertices = %d'%len(X))
+print('edges = %d'%len(mesh.segment_soup().elements))
+print('faces = %d'%len(mesh.elements))
+if 0:
+  print('dihedrals = %g %g'%tuple(180/pi*asarray(dihedral_angle_range(tm))))
 
 # View
-app = gui.QEApp(sys.argv,True)
-main = gui.MainWindow(props)
-main.view.add_scene('mesh',gui.MeshScene(props,mesh,X,(.2,.2,1),(0,1,0)))
-main.init()
-app.run()
+if any(X[:,2]):
+  import gui
+  app = gui.QEApp(sys.argv,True)
+  main = gui.MainWindow(props)
+  main.view.add_scene('mesh',gui.MeshScene(props,const_value(mesh),const_value(X),(.2,.2,1),(0,1,0)))
+  main.init()
+  app.run()
+else: # Use pylab in 2D
+  import pylab
+  from matplotlib import cm,collections
+  X = X[:,:2]
+  pylab.plot(X[:,0],X[:,1],'r.',markersize=20)
+  for i in xrange(len(X)):
+    pylab.text(X[i,0],X[i,1],'v%d'%i,fontsize=20)
+  tris = X[mesh.elements]
+  polys = collections.PolyCollection(tris,facecolor='lightblue')
+  axes = pylab.axes()
+  axes.add_collection(polys)
+  axes.set_aspect('equal')
+  axes.set_xlim(X[:,0].min()-.1,X[:,0].max()+.1)
+  axes.set_ylim(X[:,1].min()-.1,X[:,1].max()+.1)
+  pylab.title(meshname())
+  pylab.show()
