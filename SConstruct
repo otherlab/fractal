@@ -38,7 +38,7 @@ def options(env,*vars):
       env[name] = default
 
 # Base environment
-env = Environment(tools=['default','pdflatex','pdftex'],TARGET_ARCH='x86') # TARGET_ARCH applies only on Windows
+env = Environment(tools=['default','pdflatex','pdftex','textfile'],TARGET_ARCH='x86') # TARGET_ARCH needed on Windows
 default_cxx = env['CXX']
 posix = env['PLATFORM']=='posix'
 darwin = env['PLATFORM']=='darwin'
@@ -59,7 +59,7 @@ if darwin:
 else:
   env.Replace(base='/usr')
 
-# install or develop only if explicitly asked for on the command line
+# Add install or develop targets only if explicitly asked for on the command line
 env['install'] = 'install' in COMMAND_LINE_TARGETS
 env['develop'] = 'develop' in COMMAND_LINE_TARGETS
 if env['develop']:
@@ -171,15 +171,13 @@ if windows:
     env.Append(CXXFLAGS=' /Zi')
   if env['type'] in ('release','optdebug','profile'):
     env.Append(CXXFLAGS=' /O2')
-  env.Append(CXXFLAGS=ifsse('/arch:SSE2') + ' /W3 /wd4996 /wd4267 /wd4180 /EHs',LINKFLAGS='/ignore:4221',CPPDEFINES=[ifsse('__SSE__'), '_CRT_SECURE_NO_DEPRECATE','NOMINMAX','_USE_MATH_DEFINES'])
+  env.Append(CXXFLAGS=ifsse('/arch:SSE2') + ' /W3 /wd4996 /wd4267 /wd4180 /EHs',LINKFLAGS='/ignore:4221')
   if env['cxx'].endswith('icl') or env['cxx'].endswith('icl"'):
     env.Append(CXXFLAGS=' /wd2415 /wd597 /wd177')
   if env['type']=='debug':
     env.Append(CXXFLAGS=' /RTC1 /MDd',CCFLAGS=' /MDd',LINKFLAGS=' /DEBUG')
   else:
     env.Append(CXXFLAGS=' /MD')
-  if not env['shared']:
-    env.Append(CPPDEFINES=['GEODE_SINGLE_LIB'])
   #dangerous: env.Append(LINKFLAGS='/NODEFAULTLIB:libcmtd.lib')
 elif env['cxx'].endswith('icc') or env['cxx'].endswith('icpc'):
   if env['type']=='optdebug' or env['type']=='debug':
@@ -189,7 +187,7 @@ elif env['cxx'].endswith('icc') or env['cxx'].endswith('icpc'):
   env.Append(CXXFLAGS=' -w -vec-report0 -Wall -Winit-self -Woverloaded-virtual',LINKFLAGS=' -w')
 else: # assume g++...
   gcc = True
-  # machine flags
+  # Machine flags
   def ifsse(s):
     return s if env['sse'] else ' -mno-sse'
   if env['arch']=='athlon':    machine_flags = ' -march=athlon-xp '+ifsse('-msse')
@@ -199,7 +197,7 @@ else: # assume g++...
   elif env['arch']=='native':  machine_flags = ' -march=native -mtune=native '+ifsse('')
   else: machine_flags = ''
   env.Append(CXXFLAGS=machine_flags)
-  # type specific flags
+  # Type specific flags
   if env['type']=='optdebug': env.Append(CXXFLAGS=' -g3')
   if env['type']=='release' or env['type']=='optdebug' or env['type']=='profile':
     optimizations = env['optimizations']
@@ -243,13 +241,11 @@ if env['Werror']:
 
 # Relax a few warnings for clang
 if clang:
-  env.Append(CXXFLAGS=' -Wno-array-bounds -Wno-unknown-pragmas') # for Python and OpenMP, respectively
+  env.Append(CXXFLAGS=' -Wno-array-bounds -Wno-unknown-pragmas -Wno-deprecated') # for Python and OpenMP, respectively
 
+# Decide whether to disable assertions (does not affect GEODE_ASSERT)
 if env['type']=='release' or env['type']=='profile' or env['type']=='optdebug':
   env.Append(CPPDEFINES=['NDEBUG'])
-if env['real']=='float':
-  env.Append(CPPDEFINES=['GEODE_FLOAT'])
-env.Append(CPPDEFINES=[('GEODE_THREAD_SAFE',int(env['thread_safe']))])
 
 # Enable OpenMP
 if env['openmp']:
@@ -260,33 +256,60 @@ if env['openmp']:
   else:
     print>>sys.stderr, 'Warning: clang doesn\'t know how to do OpenMP, so many things will be slower'
 
-# Turn off boost::exceptions to avoid completely useless code bloat
-env.Append(CPPDEFINES=['BOOST_EXCEPTION_DISABLE'])
-
 # Work around apparent bug in variable expansion
 env.Replace(prefix_lib=env.subst(env['prefix_lib']))
 
 # External libraries
 externals = {}
-def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=(),libpath=(),rpath=0,libs=(),
-             copy=(),frameworkpath=(),frameworks=(),requires=(),hide=False,callback=None,
-             headers=None,configure=None,preamble=(),body=(),required=False):
-  if name in externals:
+lazy_externals = {}
+
+def external(env,name,lazy=1,**kwargs):
+  '''Add an external library.  See external_helper for keyword argument details.'''
+  if name in externals or name in lazy_externals:
     raise RuntimeError("Trying to redefine the external %s"%name)
 
   def fail():
-    if required:
-      print>>sys.stderr, 'FATAL: %s is required'%name
+    env['use_'+name] = 0
+    if name in externals:
+      del externals[name]
+    if name in lazy_externals:
+      del lazy_externals[name]
+    if kwargs.get('required'):
+      print>>sys.stderr, 'FATAL: %s is required.  See config.log for error details.'%name
       Exit(1)
 
   # Do we want to use this external?
   Help('\n')
   options(env,('use_'+name,'Use '+name+' if available',1))
-  if not env['use_'+name]:
+  if env['use_'+name]:
+    # Remember for lazy configuration
+    lazy_externals[name] = env,kwargs,fail
+    env['need_'+name] = kwargs.get('default',False)
+  else:
     fail()
-    return
 
+  # Some externals can't be lazy
+  if not lazy:
+    force_external(name)
+
+def has_external(name):
+  if name in externals:
+    return True
+  force_external(name)
+  return name in externals
+
+def force_external(name):
+  try:
+    env,kwargs,fail = lazy_externals[name]
+  except KeyError:
+    return
+  external_helper(env,name,fail=fail,**kwargs)
+
+def external_helper(env,name,default=0,dir=0,flags=(),cxxflags='',linkflags='',cpppath=(),libpath=(),rpath=0,libs=(),publiclibs=(),
+             copy=(),frameworkpath=(),frameworks=(),requires=(),hide=False,callback=None,
+             headers=None,configure=None,preamble=(),body=(),required=False,fail=None):
   for r in requires:
+    force_external(r)
     if not env['use_'+r]:
       if verbose:
         print 'disabling %s: no %s'%(name,r)
@@ -295,8 +318,8 @@ def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=
 
   lib = {'dir':dir,'flags':flags,'cxxflags':cxxflags,'linkflags':linkflags,'cpppath':cpppath,'libpath':libpath,
          'rpath':rpath,'libs':libs,'copy':copy,'frameworkpath':frameworkpath,'frameworks':frameworks,'requires':requires,
-         'hide':hide,'callback':callback,'name':name}
-  env['need_'+name] = default
+         'publiclibs':publiclibs,'hide':hide,'callback':callback,'name':name}
+  del lazy_externals[name]
   externals[name] = lib
 
   # Make sure empty lists are copied and do not refer to the same object
@@ -311,6 +334,7 @@ def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=
     (name+'_libpath','Library directory for '+name,0),
     (name+'_rpath','Extra rpath directory for '+name,0),
     (name+'_libs','Libraries for '+name,0),
+    (name+'_publiclibs','Public (re-exported) libraries for '+name,0),
     (name+'_copy','Copy these files to the binary output directory for ' + name,0),
     (name+'_frameworks','Frameworks for '+name,0),
     (name+'_frameworkpath','Framework path for '+name,0),
@@ -340,6 +364,7 @@ def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=
   if env[name+'_rpath']!=0: lib['rpath'] = sanitize(env[name+'_rpath'])
   elif lib['rpath']==0: lib['rpath'] = [Dir(d).abspath for d in lib['libpath']]
   if env[name+'_libs']!=0: lib['libs'] = env[name+'_libs']
+  if env[name+'_publiclibs']!=0: lib['publiclibs'] = env[name+'_publiclibs']
   if env[name+'_frameworks']!=0: lib['frameworks'] = env[name+'_frameworks']
   if env[name+'_frameworkpath']!=0: lib['frameworkpath'] = sanitize(env[name+'_frameworkpath'])
   if env[name+'_cxxflags']!=0: lib['cxxflags'] = env[name+'_cxxflags']
@@ -347,24 +372,21 @@ def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=
   if env[name+'_copy']!=0: lib['copy'] = env[name+'_copy']
   if env[name+'_callback']!=0: lib['callback'] = env[name+'_callback']
 
-  # SConscripts can override this to restrict flags to certain files
-  env[name+'_pattern'] = None
-
   # Check whether the external is usable
   if configure is not None:
     has = configure if isinstance(configure,bool) else configure(env,lib)
     if not has:
-      env['use_'+name] = 0
-      del externals[name]
       fail()
   else:
     assert headers is not None
 
     # Match the configure environment to how we'll actually build things
     env_conf = env.Clone()
+    for n in externals.keys():
+      env_conf['need_'+n] = 0
     env_conf['need_'+name] = 1
     env_conf = link_flags(env_conf)
-    libraries = [externals[n] for n in externals.keys() if env_conf['need_'+n]]
+    libraries = [externals[n] for n in externals.keys() if env_conf.get('need_'+n)]
     def absorb(source,**kwargs):
       for k,v in kwargs.iteritems():
         env_conf[k] = v
@@ -379,13 +401,11 @@ def external(env,name,default=0,dir=0,flags='',cxxflags='',linkflags='',cpppath=
       return r
     conf = env_conf.Configure(custom_tests={'Check':check})
     if not conf.Check():
-      env['use_'+name] = 0
-      del externals[name]
       fail()
     conf.Finish()
 
 # Library configuration.  Local directories must go first or scons will try to install unexpectedly
-env.Prepend(CPPPATH=['#.'])
+env.Prepend(CPPPATH=['#.','#$variant_build'])
 env.Append(CPPPATH=[env['prefix_include']],LIBPATH=[env['prefix_lib']])
 env.Prepend(LIBPATH=['#$variant_build/lib'])
 if posix:
@@ -394,14 +414,16 @@ if posix:
 # Account for library dependencies
 def add_dependencies(env):
   libs = []
-  for a,lib in externals.iteritems():
-    if env['need_'+a]:
+  for name in tuple(lazy_externals.iterkeys()):
+    if env.get('need_'+name):
+      force_external(name)
+  for name,lib in externals.iteritems():
+    if env.get('need_'+name):
       libs += lib['requires']
-
   while libs:
-    a = libs.pop()
-    env['need_'+a] = 1
-    libs.extend(externals[a]['requires'])
+    name = libs.pop()
+    env['need_'+name] = 1
+    libs.extend(externals[name]['requires'])
 
 # Linker flags
 all_uses = []
@@ -414,13 +436,16 @@ def link_flags(env):
   workaround = env.get('need_qt',0)
 
   for name,lib in externals.items():
-    if env_link['need_'+name]:
+    if env_link.get('need_'+name):
       all_uses.append('need_'+name)
       env_link.Append(LINKFLAGS=lib['linkflags'],LIBS=lib['libs'],FRAMEWORKPATH=lib['frameworkpath'],FRAMEWORKS=lib['frameworks'])
+      if darwin:
+        env_link.Append(LINKFLAGS=' '.join('-Xlinker -reexport-l%s'%n for n in lib['publiclibs']))
+      else:
+	env_link.Append(LIBS=lib['publiclibs'])
       env_link.AppendUnique(LIBPATH=lib['libpath'])
       if workaround: # Prevent qt tool from dropping include paths when building moc files
         env_link.PrependUnique(CPPPATH=lib['cpppath'])
-        env_link.PrependUnique(CPPDEFINES=lib['flags'])
       if lib.has_key('rpath'):
         env_link.PrependUnique(RPATH=lib['rpath'])
       if lib['callback'] is not None:
@@ -444,7 +469,6 @@ def copy_files(env):
 # Convert sources into objects
 def objects_helper(env,source,libraries,builder):
   if type(source)!=str: return source # assume it's already an object
-  cppdefines_reversed = env['CPPDEFINES'][::-1]
   cpppath_reversed = env['CPPPATH'][::-1]
   cpppath_hidden_reversed = env['CPPPATH_HIDDEN'][::-1]
   if darwin:
@@ -454,15 +478,11 @@ def objects_helper(env,source,libraries,builder):
     frameworks,frameworkpath = [],[]
   cxxflags = str(env['CXXFLAGS'])
   for lib in libraries:
-    pattern = env[lib['name']+'_pattern']
-    if pattern and source and not pattern.search(File(source).abspath):
-      continue
-    cppdefines_reversed.extend(lib['flags'][::-1])
     (cpppath_hidden_reversed if lib['hide'] else cpppath_reversed).extend(lib['cpppath'][::-1])
     frameworkpath.extend(lib['frameworkpath'])
     frameworks.extend(lib['frameworks'])
     cxxflags += lib['cxxflags']
-  return builder(source,CPPDEFINES=cppdefines_reversed[::-1],CPPPATH=cpppath_reversed[::-1],CPPPATH_HIDDEN=cpppath_hidden_reversed[::-1],FRAMEWORKPATH=frameworkpath,FRAMEWORKS=frameworks,CXXFLAGS=cxxflags)
+  return builder(source,CPPPATH=cpppath_reversed[::-1],CPPPATH_HIDDEN=cpppath_hidden_reversed[::-1],FRAMEWORKPATH=frameworkpath,FRAMEWORKS=frameworks,CXXFLAGS=cxxflags)
 def objects(env,sources):
   add_dependencies(env)
   libraries = [externals[name] for name in externals.keys() if env['need_'+name]]
@@ -491,13 +511,16 @@ if windows:
   python_libs = []
   projects = []
 
+def dir_or_file(path):
+  return Entry(path).disambiguate() # either File or Dir
+
 # Target must be a directory!
 def install_or_link(env,target,src):
   if env['install'] or env['develop']:
     # Get the real location of src
-    srcpath = File(src).abspath
+    srcpath = dir_or_file(src).abspath
     if not os.path.exists(srcpath):
-      srcpath = File(src).srcnode().abspath
+      srcpath = dir_or_file(src).srcnode().abspath
       if not os.path.exists(srcpath):
         raise RuntimeError("can't find %s in either source or build directories"%src)
     if env['install']:
@@ -522,12 +545,12 @@ def library(env,name,libs=(),skip=(),extra=(),skip_all=False,no_exports=False,py
     print 'Warning: library %s has no input source files'%name
   if env.get('need_qt',0): # Qt gets confused if we only set options on the builder
     env = env.Clone()
-    qt = externals['qt']
-    env.Append(CPPDEFINES=qt['flags'],CXXFLAGS=qt['cxxflags'])
+    force_external('qt')
+    env.Append(CXXFLAGS=externals['qt']['cxxflags'])
 
   # Install headers
   for h in headers:
-    install_or_link(env, os.path.join(env['prefix_include'], Dir('.').srcnode().path, os.path.dirname(h)), h)
+    install_or_link(env,os.path.join(env['prefix_include'],Dir('.').srcnode().path,os.path.dirname(h)),h)
 
   # Tell the compiler which library we're building
   env.Append(CPPDEFINES=['BUILDING_'+name])
@@ -570,6 +593,41 @@ def library(env,name,libs=(),skip=(),extra=(),skip_all=False,no_exports=False,py
       module = python_env.LoadableModule(module,source=[],LIBS=name,LIBPATH=[libpath])
       python_env.Depends(module,lib) # scons doesn't always notice this (obvious) dependency
 
+def config_header(env,name,extra=()):
+  """Generate a configuration header in the current directory"""
+  env = env.Clone()
+  add_dependencies(env)
+
+  # Collect flags
+  flags = []
+  if env['real']=='float':
+    flags.append('GEODE_FLOAT')
+  flags.append(('GEODE_THREAD_SAFE',int(env['thread_safe'])))
+  if env['sse']:
+    flags.append('__SSE__')
+  if windows:
+    if not env['shared']:
+      flags.append('GEODE_SINGLE_LIB')
+    flags.extend(('_CRT_SECURE_NO_DEPRECATE','NOMINMAX','_USE_MATH_DEFINES'))
+  for n,lib in externals.items():
+    if env.get('need_'+n):
+      flags.extend(lib['flags'])
+  # Turn off boost::exceptions to avoid completely useless code bloat
+  flags.append('BOOST_EXCEPTION_DISABLE')
+
+  # Generate header 
+  lines = ['// Autogenerated configuration header','#pragma once']
+  for flag in flags:
+    assert isinstance(flag,(str,bytes,tuple)),'Flags must be string or (string,value), got %s'%flag
+    n,v = flag if isinstance(flag,tuple) else (flag,None)
+    lines.append('\n#ifndef %s\n#define %s%s\n#endif'%(n,n,('' if v is None else ' %s'%v)))
+  if extra:
+    lines.append('')
+    lines.extend(extra)
+  header, = env.Textfile(name,lines)
+  env.Depends('.',header)
+  install_or_link(env,os.path.join(env['prefix_include'],os.path.dirname(header.srcnode().path)),header)
+
 # Build a program
 def program(env,name,cpp=None):
   if env['skip_programs']:
@@ -585,19 +643,20 @@ def program(env,name,cpp=None):
     install_or_link(env, env['prefix_bin'], b)
 
 # Install a (possibly directory) resource
-def resource(env,dir):
-  # if we are installing, and we're adding a directory, add a dependency for each file found in its subtree
-  if env['install'] and os.path.isdir(str(Dir(dir).srcnode())):
+def resource(env,path):
+  # If we are installing, and we're adding a directory, add a dependency for each file found in its subtree
+  node = dir_or_file(path).srcnode()
+  if env['install'] and os.path.isdir(str(node)):
     def visitor(basedir, dirname, names):
       reldir = os.path.relpath(dirname, basedir)
       for name in names:
         fullname = os.path.join(dirname, name)
         install_or_link(env, os.path.join(env['prefix_share'], reldir), fullname)
     basedir = str(Dir('.').srcnode())
-    os.path.walk(str(Dir(dir).srcnode()), visitor, basedir)
+    os.path.walk(str(node), visitor, basedir)
   else:
     # if we're just making links, a single link is enough even if it's a directory
-    install_or_link(env, env['prefix_share'], Dir(dir).srcnode())
+    install_or_link(env, env['prefix_share'], node)
 
 # Configure latex
 def configure_latex():
@@ -610,12 +669,15 @@ def configure_latex():
   if not conf.Check():
     latex_env['use_latex'] = 0
   conf.Finish()
-if latex_env['use_latex']:
-  configure_latex()
+latex_configured = False
 
 # Turn a latex document into a pdf
 def latex(name):
   if latex_env['use_latex']:
+    global latex_configured
+    if not latex_configured:
+      latex_configured = True
+      configure_latex()
     pdf = os.path.join('#'+Dir('.').srcnode().path,name+'.pdf')
     latex_env.PDF(pdf,name+'.tex')
 
@@ -696,30 +758,24 @@ def configure_mpi(env,mpi):
 # Predefined external libraries
 external(env,'python',default=1,frameworks=['Python'],flags=['GEODE_PYTHON'],configure=configure_python)
 external(env,'boost',default=1,required=1,hide=1,headers=['boost/version.hpp'])
-external(env,'boost_link',requires=['boost'],libs=['boost_iostreams$boost_lib_suffix','boost_filesystem$boost_lib_suffix','boost_system$boost_lib_suffix','z','bz2'],hide=1,headers=())
+external(env,'boost_link',requires=['boost'],libs=['boost_iostreams$boost_lib_suffix',
+  'boost_filesystem$boost_lib_suffix','boost_system$boost_lib_suffix','z','bz2'],hide=1,headers=())
 external(env,'mpi',flags=['GEODE_MPI'],configure=configure_mpi)
-external(env,'zlib',flags=['GEODE_ZLIB'],libs=['z'],headers=['zlib.h'])
-external(env,'libjpeg',flags=['GEODE_LIBJPEG'],libs=['jpeg'],headers=[],
-  preamble=['#include <stdio.h>','extern "C" {','#ifdef _WIN32','#undef HAVE_STDDEF_H','#endif','#include <jpeglib.h>','}'])
-external(env,'libpng',flags=['GEODE_LIBPNG'],libs=['png'],requires=['zlib'] if windows else [],headers=['png.h'])
-external(env,'imath',libs=['Imath'],cpppath=['$base/include/OpenEXR'],cxxflags=' /wd4290' if windows else '',headers=['OpenEXR/'*windows+'ImathMatrix.h'])
-external(env,'openexr',flags=['GEODE_OPENEXR'],libs=['IlmImf','Half'],requires=['imath'],headers=['OpenEXR/ImfRgbaFile.h'])
-external(env,'gmp',flags=['GEODE_GMP'],libs=['gmp'],headers=['gmp.h'])
-external(env,'openmesh',libpath=['/usr/local/lib/OpenMesh'],flags=['GEODE_OPENMESH'],libs=['OpenMeshCore','OpenMeshTools'],requires=['boost_link'],headers=['OpenMesh/Core/Utils/Endian.hh'])
-if windows: external(env,'shellapi',default=windows,libs=['Shell32.lib'])
 
-# BLAS is tricky.  We define separate externals for openblas, atlas, and mkl, then a unified external which picks one of them
+# BLAS is tricky.  We define separate externals for openblas, atlas, and mkl,
+# then a unified external which picks one of them.
 def blas_variants():
   body = ['  cblas_dscal(0,1,0,1);']
   external(env,'atlas',libs=['cblas','lapack','atlas'],headers=['cblas.h'],body=body)
   external(env,'openblas',libs=['lapack','blas'],headers=['cblas.h'],body=body)
-  if darwin: external(env,'accelerate',frameworks=['Accelerate'],headers=['Accelerate/Accelerate.h'],body=body)
+  if darwin:  external(env,'accelerate',frameworks=['Accelerate'],headers=['Accelerate/Accelerate.h'],body=body)
   if windows: external(env,'mkl',flags=['GEODE_MKL'],headers=['mkl_cblas.h'],body=body,libs='mkl_intel_lp64 mkl_intel_thread mkl_core mkl_mc iomp5 mkl_lapack'.split())
   else:       external(env,'mkl',flags=['GEODE_MKL'],headers=['mkl_cblas.h'],body=body,linkflags='-Wl,--start-group -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lmkl_mc -liomp5 -lmkl_lapack -Wl,--end-group -fopenmp -pthread')
 blas_variants()
 def configure_blas(env,blas):
   kinds = ['accelerate']*darwin+['openblas','atlas','mkl']
   for kind in kinds:
+    force_external(kind)
     if env['use_'+kind]:
       print 'configuring blas: using %s'%kind
       blas['requires'] = [kind]
@@ -755,8 +811,8 @@ def children(env,skip=()):
       child(env,dir)
 
 # Build everything
-Export('''child children options external externals library objects program latex
-          clang posix darwin windows resource install_or_link''')
+Export('''child children options external has_external library objects program latex
+          clang posix darwin windows resource install_or_link config_header''')
 if os.path.exists(File('#SConscript').abspath):
   child(env,'.')
 else:
