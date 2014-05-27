@@ -343,12 +343,12 @@ def flopsolve():
   def energy(X,strict=True):
     X = X.reshape(-1,3)
     if strict and collisions.collisions(X):
-      return inf
+      return 1e6
     Le = lengths(X)-rest
     L = sqr_magnitude(Le)/2
     Lm = maxabs(Le/rest)
     C = stiff*collisions.energy(X) if stiff else 0
-    print ('energies: L = %g (max %g), C = %g'%(L,Lm,C))
+    print('energies: L = %g (max %g), C = %g'%(L,Lm,C))
     return L+C
   def gradient(X):
     X = X.reshape(-1,3)
@@ -364,7 +364,7 @@ def flopsolve():
     else:
       C = close-collisions.closest(X)
     L = maxabs(lengths(X)/rest-1)
-    print ('worst: L = %g, C = %g'%(L,C))
+    print('worst: L = %g, C = %g'%(L,C))
     return max(L,C)
 
   # Test
