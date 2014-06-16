@@ -36,7 +36,7 @@ using Log::cout;
 using std::endl;
 
 static Array<int> boundary_edges_to_faces(const TriangleSoup& mesh, RawArray<const Vector<int,2>> edges) {
-  Array<int> face(edges.size(),false);
+  Array<int> face(edges.size(),uninit);
   auto incident = mesh.incident_elements();
   for (const int s : range(edges.size())) {
     GEODE_ASSERT(incident.valid(edges[s][0]));
@@ -176,7 +176,7 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const Triangle
       }
     }
   }
-  Array<int> map(union_find.size(),false);
+  Array<int> map(union_find.size(),uninit);
   Array<TV3> X2;
   Array<T> thick2;
   for (const int t : range(mesh.elements.size()))
@@ -185,7 +185,7 @@ static Tuple<Ref<TriangleSoup>,Array<TV3>,Array<T>> make_manifold(const Triangle
         map[3*t+i] = X2.append(X[mesh.elements[t][i]]);
         thick2.append(thick[mesh.elements[t][i]]);
       }
-  Array<Vector<int,3>> tris2(mesh.elements.size(),false);
+  Array<Vector<int,3>> tris2(mesh.elements.size(),uninit);
   for (const int t : range(mesh.elements.size()))
     for (const int i : range(3))
       tris2[t][i] = map[union_find.find(3*t+i)];
@@ -259,7 +259,7 @@ static Tuple<Array<int>,Instances,Instances> classify_loop_patches(const Triangl
     {
       GEODE_ASSERT(reps.size()<10000);
       boundary_count += info.boundary;
-      Array<Matrix<T,4>> transforms(1,false);
+      Array<Matrix<T,4>> transforms(1,uninit);
       transforms[0] = transform;
       names.append(int(reps.size()));
       // Fill in triangles
@@ -349,8 +349,8 @@ static TV3 settle_instances(const vector<Tuple<Ref<TriangleSoup>,Array<const TV3
 }
 
 static Tuple<Ref<TriangleSoup>,Array<TV3>> torus_mesh(const T R, const T r, const int N, const int n) {
-  Array<TV3> X(N*n,false);
-  Array<Vector<int,3>> tris(2*N*n,false);
+  Array<TV3> X(N*n,uninit);
+  Array<Vector<int,3>> tris(2*N*n,uninit);
   const T dA = 2*pi/N,
           da = 2*pi/n;
   for (const int i : range(N))
