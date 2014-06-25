@@ -532,7 +532,7 @@ public:
     return grad;
   }
 
-  struct CollisionVisitor : public boost::noncopyable {
+  struct CollisionVisitor : public Noncopyable {
     const SimplexTree<TV3,1>& edges;
     const SimplexTree<TV3,2>& faces;
     RawArray<const Vector<int,2>> segs;
