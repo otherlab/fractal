@@ -1,0 +1,45 @@
+#!/usr/bin/env python
+
+from __future__ import division,print_function,unicode_literals
+from geode.value import parser
+from fractal_helper import dihedral_angle_range
+from geode import *
+import subprocess
+import sys
+import re
+
+# Properties
+props = PropManager()
+resolution = props.add('resolution',6)
+border = props.add('border',10)
+levels = props.add('levels',10)
+parser.parse(props,'Sierpinski carpet gif generator',positional=[])
+
+border = border()
+resolution = resolution()
+
+def carpet(n):
+  '''Make a Sierpinski carpet with n levels'''
+  r = 3**resolution
+  if n == 0:
+    return ones((r,r))
+  sub = carpet(n-1)
+  s = r//3
+  sub = sub.reshape(s,3,s,3).mean(1).mean(-1)
+  lo = concatenate([sub,sub,sub])
+  mid = concatenate([sub,zeros((s,s)),sub])
+  C = concatenate([lo,mid,lo],axis=-1)
+  assert C.shape==(r,r)
+  return C
+
+r = 3**resolution
+m = 2*border+r
+frames = []
+for n in xrange(levels()):
+  C = carpet(n)
+  I = ones((m,m,3))
+  I[border:border+r,border:border+r] = 1+C[...,None]*(-1,-1,0)
+  name = 'sierpinski-%d.png'%n
+  Image.write(name,I)
+  frames.append(name)
+subprocess.check_call('convert -delay 20 -loop 0'.split()+frames+['sierpinski.gif'])
