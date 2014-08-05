@@ -1,6 +1,8 @@
 *.png
 *.svg
 *.pyc
+*.obj
+*.gif
 *.so
 mitsuba.*.log
 gen
