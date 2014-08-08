@@ -5,12 +5,13 @@
 #include <geode/array/IndirectArray.h>
 #include <geode/geometry/ParticleTree.h>
 #include <geode/geometry/Ray.h>
+#include <geode/geometry/Segment.h>
 #include <geode/geometry/SimplexTree.h>
 #include <geode/geometry/traverse.h>
 #include <geode/geometry/Triangle3d.h>
 #include <geode/mesh/SegmentSoup.h>
 #include <geode/mesh/TriangleSoup.h>
-#include <geode/openmesh/TriMesh.h>
+#include <geode/mesh/TriangleTopology.h>
 #include <geode/python/Class.h>
 #include <geode/python/module.h>
 #include <geode/python/stl.h>
@@ -611,10 +612,11 @@ public:
 GEODE_DEFINE_TYPE(SimpleCollisions)
 }
 
-Box<T> dihedral_angle_range(const TriMesh& mesh) {
+Box<T> dihedral_angle_range(const TriangleTopology& mesh, RawField<const TV3,VertexId> X) {
   Box<T> angles;
-  for (const auto e : mesh.edge_handles())
-    angles.enlarge(mesh.dihedral_angle(e));
+  for (const auto e : mesh.halfedges())
+    if (!mesh.is_boundary(e))
+      angles.enlarge(mesh.dihedral(X,e));
   return angles;
 }
 
