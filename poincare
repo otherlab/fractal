@@ -378,10 +378,8 @@ def flopsolve():
 
   # Restart if requested
   if restart():
-    tm = TriMesh()
-    tm.read(restart())
+    tm,X0 = read_mesh(restart())
     assert all(tm.elements()==fine_lattice_mesh().elements)
-    X0 = tm.X()
 
   # Optionally write out checkpoints
   callback = None
@@ -393,12 +391,9 @@ def flopsolve():
     def checkwrite(X):
       iterations[0] += 1
       if iterations[0]%checkpoint()==0:
-        tm = TriMesh()
-        tm.add_vertices(X.reshape(-1,3))
-        tm.add_faces(fine_lattice_mesh().elements)
         name = 'poincare-checkpoint-%d.obj'%iterations[0]
         print('saving %s'%name)
-        tm.write(name)
+        write_mesh(name,fine_lattice_mesh(),X.reshape(-1,3))
     callback = checkwrite
 
   # Solve
@@ -433,10 +428,7 @@ def flopsolve():
 
 def flop():
   def save_mesh(name='poincare.obj'):
-    tm = TriMesh()
-    tm.add_vertices(flopsolve())
-    tm.add_faces(fine_lattice_mesh().elements)
-    tm.write(name)
+    write_mesh(name,fine_lattice_mesh(),flopsolve())
   if autosave():
     save_mesh(autosave())
   flopsolve()

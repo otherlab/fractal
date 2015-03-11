@@ -132,10 +132,7 @@ def merged():
 
 def main():
   def save_mesh(name='poincare-instance.obj'):
-    tm = TriMesh()
-    tm.add_vertices(merged()[1])
-    tm.add_faces(merged()[0].elements)
-    tm.write(name)
+    write_mesh(name,*merged())
   try:
     import gui
     app = gui.QEApp(sys.argv,True)
