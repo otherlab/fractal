@@ -244,7 +244,7 @@ def find_quads(X,edges):
     for z in near[y]:
       if x<z:
         for w in near[z]:
-          if x<w and x in near[w]:
+          if y<w and x in near[w]:
             if cross(X[z]-X[x],X[y]-X[x]) > 0:
               quads.add((x,y,z,w))
             else:
