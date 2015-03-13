@@ -76,6 +76,15 @@ class Mobius(ndarray):
       a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
       return splitcomplex((a*z+b)/(c*z+d))
 
+  def __pow__(self,e):
+    if isinstance(e,int):
+      if e == 0:
+        return Mobius.identity()
+      else:
+        return self*(self**(e-1))
+    else:
+      raise NotImplemented(type(e))
+
   def inverse(self):
     a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
     i = empty(self.shape,self.dtype)
@@ -202,10 +211,13 @@ def lattice():
   a = 2*pi/degree()
   advance = Mobius.translation((equilateral_length(),0))*Mobius.from_angle(pi)
   rotate = Mobius.from_angle(a*arange(degree()))
-  levels = [rotate]
+  protate = advance*rotate[1]
+  polygon = array([protate**i for i in xrange(1,poly()-1)])[:,None].view(Mobius)
+  link = (rotate[::-1]*polygon*rotate).reshape(-1,2,2)
+  levels = [Mobius.identity()[None,:]]
   for d in xrange(depth()):
-    next = ((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2)
-    levels.append(((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2))
+    next = (link[:,None]*levels[-1]).reshape(-1,2,2)
+    levels.append(next)
   trans = Mobius.concat(*levels)
   # Prune duplicates
   compact = ParticleTree(trans*zeros(2),1).remove_duplicates(1e-7)
@@ -244,7 +256,7 @@ def find_quads(X,edges):
     for z in near[y]:
       if x<z:
         for w in near[z]:
-          if x<w and x in near[w]:
+          if y<w and x in near[w]:
             if cross(X[z]-X[x],X[y]-X[x]) > 0:
               quads.add((x,y,z,w))
             else:
@@ -325,6 +337,12 @@ def flopsolve():
   edges = fine_lattice_mesh().segment_soup().elements
   rest = distance(X0[edges[:,0]],X0[edges[:,1]])
   rest /= rest.mean()
+  if poly()==4:
+    for count in fine_lattice_mesh().counts:
+      assert count == 4
+    diagonals = [fine_lattice_mesh().vertices[4*i:4*i+3:2] for i in xrange(len(fine_lattice_mesh().counts))] + [fine_lattice_mesh().vertices[4*i+1:4*i+4:2] for i in xrange(len(fine_lattice_mesh().counts))]
+    edges = array(list(edges) + list(diagonals))
+    rest = array(list(rest) + [2.]*len(diagonals))
   def lengths(X):
     return magnitudes(X[edges[:,1]]-X[edges[:,0]])
 
@@ -339,7 +357,11 @@ def flopsolve():
   # Define problem
   close = separation()
   stiff = 10
-  collisions = SimpleCollisions(fine_lattice_mesh(),X0,close,True)
+  if poly() > 3:
+    mesh = fine_lattice_mesh().triangle_mesh()
+    collisions = SimpleCollisions(mesh,X0,close,True)
+  else:
+    collisions = SimpleCollisions(fine_lattice_mesh(),X0,close,True)
   def energy(X,strict=True):
     X = X.reshape(-1,3)
     if strict and collisions.collisions(X):
