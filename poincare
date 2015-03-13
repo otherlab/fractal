@@ -76,6 +76,15 @@ class Mobius(ndarray):
       a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
       return splitcomplex((a*z+b)/(c*z+d))
 
+  def __pow__(self,e):
+    if isinstance(e,int):
+      if e == 0:
+        return Mobius.identity()
+      else:
+        return self*(self**(e-1))
+    else:
+      raise NotImplemented(type(e))
+
   def inverse(self):
     a,b,c,d = rollaxis(self.view(ndarray).reshape(self.shape[:-2]+(4,)),-1)
     i = empty(self.shape,self.dtype)
@@ -202,10 +211,13 @@ def lattice():
   a = 2*pi/degree()
   advance = Mobius.translation((equilateral_length(),0))*Mobius.from_angle(pi)
   rotate = Mobius.from_angle(a*arange(degree()))
-  levels = [rotate]
+  protate = advance*rotate[1]
+  polygon = array([protate**i for i in xrange(1,poly()-1)])[:,None].view(Mobius)
+  link = (rotate[::-1]*polygon*rotate).reshape(-1,2,2)
+  levels = [Mobius.identity()[None,:]]
   for d in xrange(depth()):
-    next = ((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2)
-    levels.append(((rotate*advance)[:,None]*levels[-1]).reshape(-1,2,2))
+    next = (link[:,None]*levels[-1]).reshape(-1,2,2)
+    levels.append(next)
   trans = Mobius.concat(*levels)
   # Prune duplicates
   compact = ParticleTree(trans*zeros(2),1).remove_duplicates(1e-7)
